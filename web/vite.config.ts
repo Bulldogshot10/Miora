@@ -3,7 +3,6 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import path from "node:path";
 
-const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
@@ -14,15 +13,18 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
-    host: host ?? false,
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 5174,
-        }
-      : undefined,
+    hmr: {
+      protocol: "ws",
+      host: "127.0.0.1",
+      port: 5174,
+    },
+  },
+  preview: {
+    host: "127.0.0.1",
+    port: 4173,
+    strictPort: true,
   },
 });
