@@ -207,15 +207,9 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
         .confirmed_bleeding_durations()
         .map_err(|error| error.to_string())?;
 
-    let phase = phase_snapshot_for_today(
-        &starts,
-        &completed_durations,
-        latest_record,
-        today,
-    );
+    let phase = phase_snapshot_for_today(&starts, &completed_durations, latest_record, today);
 
-    let bleeding_prompt =
-        bleeding_prompt_for_today(latest_record, &completed_durations, today);
+    let bleeding_prompt = bleeding_prompt_for_today(latest_record, &completed_durations, today);
 
     Ok(DashboardSnapshot {
         last_period_start: latest.map(|date| date.format("%Y-%m-%d").to_string()),
