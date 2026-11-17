@@ -1290,3 +1290,154 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Explicit check-in severity controls and persistent save feedback. */
+.symptom-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  padding: 8px 10px 10px;
+}
+
+.symptom-toggle {
+  width: 100%;
+  min-height: 44px;
+}
+
+.symptom-state {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.chosen .symptom-state {
+  color: var(--primary-strong);
+}
+
+.severity-control {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 3px 0 0 32px;
+}
+
+.severity-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+}
+
+.severity-options {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.severity-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.severity-button:hover {
+  border-color: var(--primary);
+  color: var(--primary-strong);
+}
+
+.severity-button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.save-feedback {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 13px;
+  padding: 14px 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.save-feedback strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.save-feedback p {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--muted-strong);
+}
+
+.feedback-success {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  background: color-mix(in srgb, var(--success) 9%, var(--surface));
+  color: var(--success);
+}
+
+.feedback-error {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+  color: var(--danger);
+}
+
+.button-spinner {
+  animation: miora-spin 900ms linear infinite;
+}
+
+@keyframes miora-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 360px) {
+  .severity-control {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-left: 0;
+  }
+
+  .severity-options {
+    gap: 4px;
+  }
+
+  .severity-button {
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button-spinner {
+    animation: none;
+  }
+}

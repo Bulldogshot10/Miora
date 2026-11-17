@@ -65,16 +65,13 @@
     }
   }
 
-  async function handleCheckinSave(input: DailyCheckinInput) {
+  async function handleCheckinSave(input: DailyCheckinInput): Promise<void> {
     busy = true;
-    statusMessage = "";
-    errorMessage = "";
     try {
       snapshot = await saveDailyCheckin(input);
-      statusMessage = "Today's check-in has been saved.";
-      activeTab = "home";
+      statusMessage = "";
     } catch (error) {
-      errorMessage = String(error);
+      throw error;
     } finally {
       busy = false;
     }
