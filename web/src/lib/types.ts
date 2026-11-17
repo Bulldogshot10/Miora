@@ -5,6 +5,7 @@ export type CyclePhaseCode =
   | "follicular"
   | "ovulation_window"
   | "luteal"
+  | "uncertain"
   | "learning";
 
 export interface PhaseProbabilities {
@@ -12,6 +13,7 @@ export interface PhaseProbabilities {
   follicular: number;
   ovulationWindow: number;
   luteal: number;
+  uncertain: number;
 }
 
 export interface CyclePhaseSnapshot {
@@ -24,7 +26,16 @@ export interface CyclePhaseSnapshot {
   confidence: number;
   probabilities: PhaseProbabilities;
   isPersonalized: boolean;
+  cycleHistoryAvailable: boolean;
+  bleedingHistoryAvailable: boolean;
   description: string;
+}
+
+export interface SymptomPatternSnapshot {
+  code: string;
+  label: string;
+  probability: number;
+  observationsUsed: number;
 }
 
 export interface BleedingPrompt {
@@ -46,6 +57,7 @@ export interface DashboardSnapshot {
   periodStarts: string[];
   checkinDates: string[];
   phase: CyclePhaseSnapshot | null;
+  symptomPatterns: SymptomPatternSnapshot[];
   bleedingPrompt: BleedingPrompt | null;
 }
 
@@ -73,5 +85,6 @@ export const EMPTY_SNAPSHOT: DashboardSnapshot = {
   periodStarts: [],
   checkinDates: [],
   phase: null,
+  symptomPatterns: [],
   bleedingPrompt: null,
 };
