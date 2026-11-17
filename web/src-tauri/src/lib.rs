@@ -5,10 +5,7 @@ use miora::domain::{
     cycle::{cycle_day, cycle_length_days},
     symptom::{Severity, SymptomCode, SymptomEntry},
 };
-use miora::engine::{
-    cycle_estimator::estimate_next_period,
-    statistics::mean,
-};
+use miora::engine::{cycle_estimator::estimate_next_period, statistics::mean};
 use miora::storage::repository::Repository;
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
@@ -46,9 +43,7 @@ struct SymptomInput {
     severity: i32,
 }
 
-fn dashboard_snapshot(
-    repository: &Repository,
-) -> Result<DashboardSnapshot, String> {
+fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, String> {
     let starts = repository
         .period_start_dates()
         .map_err(|error| error.to_string())?;
@@ -90,9 +85,7 @@ fn dashboard_snapshot(
 }
 
 #[tauri::command]
-fn get_dashboard_snapshot(
-    backend: State<'_, BackendState>,
-) -> Result<DashboardSnapshot, String> {
+fn get_dashboard_snapshot(backend: State<'_, BackendState>) -> Result<DashboardSnapshot, String> {
     let repository = backend
         .repository
         .lock()
