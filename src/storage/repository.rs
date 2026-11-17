@@ -21,6 +21,8 @@ pub struct DailyCheckinRecord {
     pub symptoms: Vec<SymptomEntry>,
 }
 
+pub type DailySymptomHistory = Vec<(NaiveDate, Vec<SymptomCode>)>;
+
 pub struct Repository {
     database: Database,
 }
@@ -412,7 +414,7 @@ impl Repository {
 
     pub fn daily_checkins_with_symptoms(
         &self,
-    ) -> Result<Vec<(NaiveDate, Vec<SymptomCode>)>, Box<dyn std::error::Error>> {
+    ) -> Result<DailySymptomHistory, Box<dyn std::error::Error>> {
         let mut statement = self.database.connection().prepare(
             "
             SELECT checkins.checkin_date, symptoms.symptom_code
