@@ -15,7 +15,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = ROOT / "web" / "package-lock.json"
 ADVISORY_URL = "https://github.com/advisories/GHSA-fc5q-39xc-vjpf"
-ALLOWED_PACKAGES = {"picomatch", "fdir"}
+# Exact versions observed in the current development-only dependency graph.
+# Keep this list narrow: any new package/version/advisory must be reviewed.
+ALLOWED_VERSIONS = {
+    "picomatch": {"4.0.7"},
+    "fdir": {"6.5.0"},
+    "tinyglobby": {"0.2.17"},
+    "svelte-check": {"4.7.8"},
+    "vite": {"6.4.6"},
+}
 SEVERITIES = {"high", "critical"}
 
 
@@ -50,6 +58,27 @@ def version_at_or_below_4_0_7(version: str) -> bool:
     return parts <= (4, 0, 7)
 
 
+def affected_by_picomatch(name: str, vulnerabilities: dict, seen=None) -> bool:
+    """Require a real dependency path to the one documented vulnerable crate."""
+    if name == "picomatch":
+        return True
+    seen = set() if seen is None else seen
+    if name in seen:
+        return False
+    seen.add(name)
+    vulnerability = vulnerabilities.get(name, {})
+    for item in vulnerability.get("via", []):
+        if isinstance(item, str) and affected_by_picomatch(item, vulnerabilities, seen):
+            return True
+        if (
+            isinstance(item, dict)
+            and item.get("name") == "picomatch"
+            and item.get("url") == ADVISORY_URL
+        ):
+            return True
+    return False
+
+
 def main() -> int:
     lock = json.loads(LOCK_PATH.read_text())
     packages = lock.get("packages", {})
@@ -79,33 +108,19 @@ def main() -> int:
         dev_only = bool(nodes) and all(node_is_dev_only(node, packages) for node in nodes)
         urls = advisory_urls(name, vulnerability, vulnerabilities)
 
+        expected_versions = ALLOWED_VERSIONS.get(name, set())
+        affected_nodes_have_expected_versions = bool(nodes) and all(
+            packages.get(node, {}).get("version") in expected_versions
+            for node in nodes
+        )
         allowed = (
-            name in ALLOWED_PACKAGES
+            name in ALLOWED_VERSIONS
             and vulnerability.get("severity") == "high"
             and urls == {ADVISORY_URL}
             and dev_only
+            and affected_nodes_have_expected_versions
+            and affected_by_picomatch(name, vulnerabilities)
         )
-
-        if name == "picomatch":
-            picomatch = packages.get("node_modules/picomatch", {})
-            allowed = allowed and version_at_or_below_4_0_7(picomatch.get("version"))
-        elif name == "fdir":
-            picomatch = packages.get("node_modules/picomatch", {})
-            picomatch_is_dev = node_is_dev_only("node_modules/picomatch", packages)
-            allowed = (
-                allowed
-                and picomatch_is_dev
-                and version_at_or_below_4_0_7(picomatch.get("version"))
-                and any(
-                    item == "picomatch"
-                    or (
-                        isinstance(item, dict)
-                        and item.get("name") == "picomatch"
-                        and item.get("url") == ADVISORY_URL
-                    )
-                    for item in vulnerability.get("via", [])
-                )
-            )
 
         if allowed:
             accepted.append(name)

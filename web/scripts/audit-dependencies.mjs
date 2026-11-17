@@ -25,41 +25,68 @@ try {
 }
 
 const allowedAdvisory = "https://github.com/advisories/GHSA-fc5q-39xc-vjpf";
+const allowedVersions = new Map([
+  ["picomatch", new Set(["4.0.7"])],
+  ["fdir", new Set(["6.5.0"])],
+  ["tinyglobby", new Set(["0.2.17"])],
+  ["svelte-check", new Set(["4.7.8"])],
+  ["vite", new Set(["6.4.6"])],
+]);
 const devPackages = lock.packages ?? {};
-const vulnerabilities = Object.entries(report.vulnerabilities ?? {});
+const vulnerabilityMap = report.vulnerabilities ?? {};
+const vulnerabilities = Object.entries(vulnerabilityMap);
 const allowed = [];
 const rejected = [];
+
+function advisoryUrls(name, seen = new Set()) {
+  if (seen.has(name)) return new Set();
+  seen.add(name);
+  const urls = new Set();
+  for (const entry of vulnerabilityMap[name]?.via ?? []) {
+    if (entry && typeof entry === "object" && entry.url) {
+      urls.add(entry.url);
+    } else if (typeof entry === "string" && vulnerabilityMap[entry]) {
+      for (const url of advisoryUrls(entry, seen)) urls.add(url);
+    }
+  }
+  return urls;
+}
+
+function affectedByPicomatch(name, seen = new Set()) {
+  if (name === "picomatch") return true;
+  if (seen.has(name)) return false;
+  seen.add(name);
+  return (vulnerabilityMap[name]?.via ?? []).some((entry) => {
+    if (
+      entry && typeof entry === "object" &&
+      entry.name === "picomatch" && entry.url === allowedAdvisory
+    ) return true;
+    return typeof entry === "string" && affectedByPicomatch(entry, seen);
+  });
+}
 
 for (const [name, item] of vulnerabilities) {
   if (!["high", "critical"].includes(item.severity)) continue;
 
-  const packageEntry = devPackages["node_modules/" + name];
-  const isDevOnly = packageEntry?.dev === true;
-
-  const directAdvisories = (item.via ?? []).filter(
-    (entry) => typeof entry === "object" && entry !== null,
+  const nodes = item.nodes ?? [];
+  const isDevOnly = nodes.length > 0 && nodes.every(
+    (node) => devPackages[node]?.dev === true,
   );
-  const isPicomatchAdvisory =
-    name === "picomatch" &&
-    packageEntry?.version === "4.0.7" &&
+  const expectedVersions = allowedVersions.get(name);
+  const exactAffectedVersions = expectedVersions !== undefined && nodes.length > 0 &&
+    nodes.every((node) => expectedVersions.has(devPackages[node]?.version));
+  const urls = advisoryUrls(name);
+
+  const approved =
     item.severity === "high" &&
     isDevOnly &&
-    item.isDirect === false &&
-    item.via?.length === 1 &&
-    directAdvisories.length === 1 &&
-    directAdvisories[0].url === allowedAdvisory;
+    exactAffectedVersions &&
+    urls.size === 1 &&
+    urls.has(allowedAdvisory) &&
+    affectedByPicomatch(name);
 
-  const isFdirPropagation =
-    name === "fdir" &&
-    packageEntry?.version === "6.5.0" &&
-    item.severity === "high" &&
-    isDevOnly &&
-    item.isDirect === false &&
-    item.via?.length === 1 &&
-    item.via[0] === "picomatch";
-
-  if (isPicomatchAdvisory || isFdirPropagation) {
-    allowed.push({ name, version: packageEntry.version, advisory: allowedAdvisory });
+  if (approved) {
+    allowed.push({ name, version: [...expectedVersions][0], advisory: allowedAdvisory });
   } else {
     rejected.push({
       name,

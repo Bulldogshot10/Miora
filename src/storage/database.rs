@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Mutex};
 
 use rusqlite::{Connection, params};
 use zeroize::Zeroizing;
@@ -7,12 +7,19 @@ use crate::storage::migrations;
 
 const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 
+// Tauri and the Android widget can open the same database from different
+// threads during startup. Serialize open/migrate so only one plaintext-to-
+/* SQLCipher */ static DATABASE_OPEN_LOCK: Mutex<()> = Mutex::new(());
+
 pub struct Database {
     connection: Connection,
 }
 
 impl Database {
     pub fn open(path: &Path, key: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+        let _open_guard = DATABASE_OPEN_LOCK
+            .lock()
+            .map_err(|_| std::io::Error::other("Database initialization lock is poisoned."))?;
         validate_key(key)?;
 
         if let Some(parent) = path.parent() {

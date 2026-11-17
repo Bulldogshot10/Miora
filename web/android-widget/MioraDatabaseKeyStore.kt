@@ -21,6 +21,9 @@ import javax.crypto.spec.GCMParameterSpec
  * noBackupFilesDir so cloud backup/device transfer cannot separate it from
  * the hardware/OS Keystore key that protects it.
  */
+internal fun mioraDatabaseFile(context: Context): File =
+    File(context.applicationContext.dataDir, "miora.sqlite3")
+
 internal object MioraDatabaseKeyStore {
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
     private const val WRAPPING_KEY_ALIAS = "com.bulldogshot10.miora.database-wrap-v1"
@@ -43,10 +46,7 @@ internal object MioraDatabaseKeyStore {
         // A missing wrapped key is recoverable only for a fresh install or a
         // legacy plaintext SQLite database awaiting its first SQLCipher migration.
         // Never mint a replacement key for an existing encrypted database.
-        val databaseFile = File(
-            File(appContext.dataDir, appContext.packageName),
-            "miora.sqlite3",
-        )
+        val databaseFile = mioraDatabaseFile(appContext)
         if (databaseFile.exists() && !hasPlaintextSqliteHeader(databaseFile)) {
             throw IOException(
                 "The encrypted database exists but its Android Keystore key file is missing. " +

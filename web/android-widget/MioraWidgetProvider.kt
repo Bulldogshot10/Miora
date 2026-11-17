@@ -301,10 +301,8 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             .apply()
     }
 
-    private fun databaseFile(context: Context): File {
-        // Tauri app_data_dir() is data_dir()/bundle identifier on Android.
-        return File(File(context.dataDir, context.packageName), "miora.sqlite3")
-    }
+    private fun databaseFile(context: Context): File =
+        mioraDatabaseFile(context)
 
     private fun todayIso(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
