@@ -520,6 +520,10 @@ export async function reportBleedingStatus(
     if (lastBleedingDate < periodStart || lastBleedingDate > date) {
       throw new Error("The last bleeding day must be between the period start and today's check.");
     }
+    const previousObservation = states[periodStart]?.lastObservation;
+    if (previousObservation && lastBleedingDate < previousObservation) {
+      throw new Error("The last bleeding day cannot be earlier than a previously confirmed bleeding observation.");
+    }
     const nextStart = readStoredDates().find((start) => start > periodStart);
     if (nextStart && lastBleedingDate >= nextStart) {
       throw new Error("The last bleeding day must be before the next recorded period start.");
