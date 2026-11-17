@@ -124,8 +124,14 @@
   <header class="app-header">
     <div class="header-inner">
       <a class="brand" href="#home" onclick={(event) => { event.preventDefault(); navigate("home"); }}>
-        <span class="brand-mark" aria-hidden="true">m</span>
-        <span class="brand-word">miora</span>
+        <img
+          class="brand-logo"
+          src="/miora-wordmark.webp"
+          alt="Miora — Cycle, Symptom, Insight"
+          width="180"
+          height="60"
+          fetchpriority="high"
+        />
       </a>
 
       <nav class="desktop-nav" aria-label="Main navigation">
