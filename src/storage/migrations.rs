@@ -47,18 +47,18 @@ pub fn migrate(connection: &Connection) -> Result<()> {
             return Err(error);
         }
 
-        if has_legacy_period_table {
-            if let Err(error) = connection.execute_batch(
+        if has_legacy_period_table
+            && let Err(error) = connection.execute_batch(
                 "
                 INSERT OR IGNORE INTO periods (start_date)
                 SELECT start_date FROM period_starts;
 
                 DROP TABLE period_starts;
                 ",
-            ) {
-                let _ = connection.execute_batch("ROLLBACK;");
-                return Err(error);
-            }
+            )
+        {
+            let _ = connection.execute_batch("ROLLBACK;");
+            return Err(error);
         }
 
         connection.execute_batch("PRAGMA user_version = 1; COMMIT;")?;

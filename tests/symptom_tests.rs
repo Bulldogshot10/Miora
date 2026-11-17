@@ -5,10 +5,10 @@ use miora::engine::symptom_model::{SymptomObservation, probability_on_cycle_day}
 fn symptom_codes_have_stable_storage_keys() {
     assert_eq!(SymptomCode::Cramps.as_str(), "cramps");
     assert_eq!(
-        SymptomCode::from_str("bloating"),
+        SymptomCode::parse_key("bloating"),
         Some(SymptomCode::Bloating)
     );
-    assert_eq!(SymptomCode::from_str("unknown"), None);
+    assert_eq!(SymptomCode::parse_key("unknown"), None);
 }
 
 #[test]

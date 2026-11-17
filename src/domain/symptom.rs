@@ -28,7 +28,7 @@ impl SymptomCode {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse_key(value: &str) -> Option<Self> {
         match value {
             "cramps" => Some(Self::Cramps),
             "bloating" => Some(Self::Bloating),
