@@ -599,10 +599,41 @@ fn save_daily_checkin(
     dashboard_snapshot(&repository)
 }
 
+#[cfg(not(target_os = "android"))]
+fn initialize_desktop_database_key() -> Result<(), String> {
+    if DATABASE_KEY.get().is_some() {
+        return Ok(());
+    }
+
+    let encoded = std::env::var("MIORA_DATABASE_KEY")
+        .map_err(|_| "Set MIORA_DATABASE_KEY to a persistent 64-character hexadecimal key.".to_string())?;
+    if encoded.len() != 64 || !encoded.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("MIORA_DATABASE_KEY must contain exactly 64 hexadecimal characters.".to_string());
+    }
+
+    let mut key = Vec::with_capacity(32);
+    for pair in encoded.as_bytes().chunks_exact(2) {
+        let pair = std::str::from_utf8(pair)
+            .map_err(|_| "MIORA_DATABASE_KEY contains invalid hexadecimal data.".to_string())?;
+        key.push(
+            u8::from_str_radix(pair, 16)
+                .map_err(|_| "MIORA_DATABASE_KEY contains invalid hexadecimal data.".to_string())?,
+        );
+    }
+
+    DATABASE_KEY
+        .set(Zeroizing::new(key))
+        .map_err(|_| "The desktop database key was already initialized.".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            #[cfg(not(target_os = "android"))]
+            initialize_desktop_database_key()
+                .map_err(std::io::Error::other)?;
+
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
 
