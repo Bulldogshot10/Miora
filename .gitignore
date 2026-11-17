@@ -3,3 +3,13 @@
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
+
+# Web frontend
+/web/node_modules/
+/web/dist/
+/web/.svelte-kit/
+/web/coverage/
+
+# Tauri generated Android/iOS projects and build output
+/web/src-tauri/gen/
+/web/src-tauri/target/

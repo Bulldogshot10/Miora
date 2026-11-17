@@ -1,0 +1,19 @@
+[package]
+name = "miora-tauri"
+version = "0.3.0"
+description = "Miora menstrual cycle tracker"
+authors = ["Miora contributors"]
+edition = "2021"
+
+[lib]
+name = "miora_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+miora = { path = "../.." }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }

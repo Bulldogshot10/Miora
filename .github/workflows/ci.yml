@@ -16,45 +16,58 @@ concurrency:
 
 jobs:
   quality:
-    name: Format, test, and lint
+    name: Rust and Web quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Linux build dependencies
+      - name: Install Tauri Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
-            pkg-config \
-            libfontconfig1-dev \
-            libxkbcommon-dev \
-            libwayland-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrender-dev \
-            libxfixes-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxrandr-dev \
-            libxinerama-dev
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libssl-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Check Rust formatting
+        run: |
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path web/src-tauri/Cargo.toml --all -- --check
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run tests
+      - name: Test Rust core
         run: cargo test --all-targets
 
-      - name: Run Clippy
+      - name: Lint Rust core
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Install Web dependencies
+        run: npm install --prefix web --no-audit --no-fund
+
+      - name: Check Svelte and TypeScript
+        run: npm run check --prefix web
+
+      - name: Build Web frontend
+        run: npm run build --prefix web
+
+      - name: Check Tauri host
+        run: cargo check --manifest-path web/src-tauri/Cargo.toml --all-targets
 
   android:
     name: Build Android APK
@@ -62,6 +75,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -77,7 +95,6 @@ jobs:
       - name: Install Android platform and NDK
         run: |
           sdkmanager --install \
-            "platform-tools" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;30.0.16248370"
@@ -89,21 +106,19 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: android
+      - name: Install Web dependencies
+        run: npm install --prefix web --no-audit --no-fund
 
-      - name: Install cargo-apk2
-        run: cargo install --locked cargo-apk2 --version 1.5.0
+      - name: Initialize Tauri Android project
+        run: npm run tauri:android:init --prefix web
 
       - name: Build debug APK
-        run: cargo apk2 build --target aarch64-linux-android --lib
+        run: npm run tauri:android:build --prefix web
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: miora-debug-apk
-          path: target/debug/apk/*.apk
+          path: web/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14

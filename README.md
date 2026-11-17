@@ -2,92 +2,94 @@
 
 **Understand your rhythm.**
 
-Miora is a lightweight, offline-first menstrual cycle and symptom tracker built with Rust and Slint. It is designed around quick daily interactions, personal cycle history, and transparent estimates.
+Miora is a private, offline-first menstrual cycle and symptom tracker. The Android app uses a Svelte web frontend inside Tauri, while Rust and SQLite handle the core logic and local data.
 
 ## Product principles
 
-- Local-first: personal cycle and symptom data stays in the app's private storage.
-- Low-friction: common tracking actions should take a few taps.
-- Evidence-led: estimates are derived from the user's own logged history.
-- Transparent: predictions are shown as windows when the data supports them.
-- Accessible: clear text contrast, large controls, and labels alongside color.
+- Local-first: cycle and symptom data stays in the app's private storage.
+- Low-friction: everyday tracking should take only a few taps.
+- Evidence-led: estimates are based on the user's own recorded history.
+- Transparent: prediction windows are shown only when there is enough history.
+- Accessible: responsive controls, readable contrast, and labels alongside color.
 
 ## Architecture
 
 ~~~text
-src/
-├── main.rs
-├── lib.rs                 # Android cdylib entry point and app composition
-├── app/
-│   ├── navigation.rs
-│   └── state.rs
-├── domain/
-│   ├── cycle.rs
-│   ├── period.rs
-│   ├── symptom.rs
-│   └── prediction.rs
-├── engine/
-│   ├── cycle_estimator.rs
-│   ├── symptom_model.rs
-│   ├── bayesian.rs
-│   └── statistics.rs
-├── storage/
-│   ├── database.rs
-│   ├── migrations.rs
-│   └── repository.rs
-└── ui/
-    ├── dashboard.slint
-    ├── calendar.slint
-    ├── checkin.slint
-    └── insights.slint
-
-tests/
-├── cycle_tests.rs
-├── prediction_tests.rs
-└── symptom_tests.rs
+miora/
+├── Cargo.toml                  # Rust domain, prediction and storage core
+├── src/
+│   ├── app/
+│   ├── domain/
+│   ├── engine/
+│   └── storage/
+└── web/
+    ├── package.json
+    ├── src/
+    │   ├── App.svelte
+    │   ├── app.css
+    │   ├── components/
+    │   ├── screens/
+    │   └── lib/
+    └── src-tauri/
+        ├── Cargo.toml
+        ├── tauri.conf.json
+        └── src/
 ~~~
 
-The extra lib.rs file is the Android shared-library adapter required by the cdylib target. Product logic remains organized in the modules above.
+The frontend uses Svelte 5, Vite, Tailwind CSS v4, Lucide icons, and shadcn-svelte conventions/components. The visual layout is custom-built for a cycle tracker rather than an admin dashboard.
 
-## UI/UX direction
+Tauri v2 embeds the web frontend in the platform WebView and exposes Rust commands for SQLite operations. The browser preview uses localStorage as a local-only development fallback; the Android app uses the Rust SQLite repository.
 
-Miora uses a mobile-first, soft editorial visual system with a persistent four-tab navigation: Home, Calendar, Check-in, and Insights.
+## UI and theme
 
-The design is informed by menstrual-health tracking research from CHI 2024, which identifies five functional requirements: cycle-event and symptom predictions, support for multiple signals, inspection of individual signals, comparison between signals, and comparison across cycles.
+Miora is designed mobile-first. The four primary screens are Home, Calendar, Check-in, and Insights. The layout uses a fluid content width, a seven-column calendar grid, a four-column mobile bottom navigation, and Android safe-area spacing.
 
-The default overview uses a linear timeline and calendar dates for planning. Insights are reserved for historical comparisons once enough real data exists.
+Light and dark modes are supported. The initial theme follows the device setting, and the theme button can switch modes manually. The selected mode is persisted by mode-watcher.
 
-Accessibility targets:
-- At least 48 × 48 dp touch targets.
-- At least 4.5:1 contrast for normal text.
-- At least 3:1 contrast for large text.
-- Phase labels accompany phase colors.
+The component setup is compatible with shadcn-svelte's CLI and token conventions. To add more primitives from the registry, run the shadcn-svelte CLI from the web directory.
 
-## Prediction engine
-
-The initial cycle estimator uses robust statistics over completed cycle intervals. It waits for at least two completed intervals before producing a prediction window.
-
-A discrete Bayesian posterior is included for experimentation with cycle-length distributions. Symptom probability estimates use cycle-day-specific observations with Laplace smoothing.
-
-The app does not fabricate predictions when there is insufficient personal history.
-
-## Stack
-
-- Rust
-- Slint 1.19
-- SQLite via rusqlite
-- Chrono
-- cargo-apk2
-
-## Run on desktop
+## Run the web preview
 
 ~~~sh
-cargo run
+cd web
+npm install
+npm run dev
 ~~~
 
-The local development database is stored in .miora/miora.sqlite3.
+Open the Vite URL shown in the terminal. Browser preview data stays in that browser's local storage.
 
-## Test and lint
+## Run the desktop Tauri app
+
+~~~sh
+cd web
+npm install
+npm run tauri -- dev
+~~~
+
+Install the platform prerequisites listed in the Tauri v2 documentation first.
+
+## Build Android
+
+Install Android Studio, Java 17, Android SDK Platform 36, and Android NDK r30. Configure JAVA_HOME, ANDROID_HOME, and ANDROID_NDK_ROOT.
+
+~~~sh
+cd web
+npm install
+npm run tauri:android:init
+npm run tauri:android:build
+~~~
+
+The debug APK is generated under:
+
+~~~text
+src-tauri/gen/android/app/build/outputs/apk/
+~~~
+
+The app supports Android API 26 and newer.
+
+## Rust checks
+
+From the repository root:
 
 ~~~sh
 cargo fmt --all -- --check
@@ -95,37 +97,27 @@ cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 ~~~
 
-## Build for Android
-
-Install the Android Rust target:
+The Tauri host can be checked separately:
 
 ~~~sh
-rustup target add aarch64-linux-android
+cargo check --manifest-path web/src-tauri/Cargo.toml --all-targets
 ~~~
-
-Install the Android SDK, NDK r30, and Java 17. Configure ANDROID_HOME, ANDROID_NDK_ROOT, and JAVA_HOME.
-
-~~~sh
-cargo install cargo-apk2
-cargo apk2 build --target aarch64-linux-android --lib
-~~~
-
-The project targets Android API 36 and supports Android API 26 and newer.
 
 ## CI and releases
 
-GitHub Actions runs formatting, tests, Clippy, and an ARM64 Android debug APK build on pushes and pull requests to main.
+GitHub Actions checks Rust formatting, tests and Clippy; checks Svelte/TypeScript; builds the web frontend; and builds an ARM64 Android debug APK.
 
-A tag matching v* triggers the signed Android release workflow. Configure these repository Actions secrets before creating a release tag:
+A tag matching v* triggers a signed Android release. Configure these Actions repository secrets before creating a release tag:
 
-- ANDROID_KEYSTORE_BASE64
-- ANDROID_KEYSTORE_PASSWORD
+- ANDROID_KEY_BASE64: release keystore encoded as Base64.
+- ANDROID_KEY_ALIAS: key alias inside the keystore.
+- ANDROID_KEY_PASSWORD: key and keystore password.
 
-Keep one persistent release keystore and back it up securely. The release workflow attaches the signed APK and SHA-256 checksum to the GitHub Release.
+Keep the release keystore private and back it up securely. Never commit it or keystore.properties.
 
 ## Data and privacy
 
-The app uses local SQLite storage and does not require an account, cloud service, analytics SDK, or network permission. The Android database is kept in the app's private internal data directory.
+The Android app stores its database in Tauri's private app data directory. It does not need an account, cloud service, analytics SDK, or remote API. The browser preview uses localStorage only for local development and is separate from the Android SQLite database.
 
 ## License
 

@@ -10,11 +10,16 @@ permissions:
 
 jobs:
   android-release:
-    name: Build and publish Android release
+    name: Build signed Android release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -30,7 +35,6 @@ jobs:
       - name: Install Android platform and NDK
         run: |
           sdkmanager --install \
-            "platform-tools" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;30.0.16248370"
@@ -42,42 +46,81 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: android-release
+      - name: Install Web dependencies
+        run: npm install --prefix web --no-audit --no-fund
 
-      - name: Install cargo-apk2
-        run: cargo install --locked cargo-apk2 --version 1.5.0
+      - name: Initialize Tauri Android project
+        run: npm run tauri:android:init --prefix web
 
-      - name: Configure Android release signing
+      - name: Configure Android signing
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            echo "::error::Configure ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets before creating a release tag."
+          if [ -z "$ANDROID_KEY_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Configure ANDROID_KEY_BASE64, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD repository secrets."
             exit 1
           fi
 
-          KEYSTORE_PATH="$RUNNER_TEMP/miora-release.jks"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          cd web/src-tauri/gen/android
+          printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/miora-release.jks"
+          {
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "password=$ANDROID_KEY_PASSWORD"
+            echo "storeFile=$RUNNER_TEMP/miora-release.jks"
+          } > keystore.properties
 
-          echo "CARGO_APK_RELEASE_KEYSTORE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gradle_file = Path("app/build.gradle.kts")
+          source = gradle_file.read_text()
+
+          if "import java.io.FileInputStream" not in source:
+              source = "import java.io.FileInputStream\nimport java.util.Properties\n\n" + source
+
+          signing_block = '''
+          signingConfigs {
+              create("release") {
+                  val keystorePropertiesFile = rootProject.file("keystore.properties")
+                  val keystoreProperties = Properties()
+                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                  keyAlias = keystoreProperties["keyAlias"] as String
+                  keyPassword = keystoreProperties["password"] as String
+                  storeFile = file(keystoreProperties["storeFile"] as String)
+                  storePassword = keystoreProperties["password"] as String
+              }
+          }
+
+          '''
+
+          if 'create("release")' not in source:
+              source = source.replace("buildTypes {", signing_block + "buildTypes {", 1)
+
+          release_marker = 'getByName("release") {'
+          if release_marker in source and 'signingConfig = signingConfigs.getByName("release")' not in source:
+              source = source.replace(
+                  release_marker,
+                  release_marker + '\n            signingConfig = signingConfigs.getByName("release")',
+                  1
+              )
+
+          gradle_file.write_text(source)
+          PY
 
       - name: Build signed release APK
-        run: cargo apk2 build --target aarch64-linux-android --lib --release
+        run: npm run tauri:android:release --prefix web
 
-      - name: Generate checksum
+      - name: Generate SHA-256 checksum
         run: |
-          cd target/release/apk
-          sha256sum *.apk > SHA256SUMS.txt
+          find web/src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print0 \
+            | xargs -0 sha256sum > web/src-tauri/gen/android/app/build/outputs/apk/SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            target/release/apk/*.apk
-            target/release/apk/SHA256SUMS.txt
+            web/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            web/src-tauri/gen/android/app/build/outputs/apk/SHA256SUMS.txt
