@@ -117,13 +117,14 @@ A tag matching v* triggers a signed Android release. Configure these Actions rep
 
 - ANDROID_KEY_BASE64: release keystore encoded as Base64.
 - ANDROID_KEY_ALIAS: key alias inside the keystore.
-- ANDROID_KEY_PASSWORD: key and keystore password.
+- ANDROID_KEY_PASSWORD: password for the signing key.
+- ANDROID_KEY_STORE_PASSWORD: optional keystore password; when omitted, Miora uses ANDROID_KEY_PASSWORD for both.
 
 Keep the release keystore private and back it up securely. Never commit it or keystore.properties.
 
 ## Data and privacy
 
-The Android app stores its database in Tauri's private app data directory. It does not need an account, cloud service, analytics SDK, or remote API. The browser preview uses localStorage only for local development and is separate from the Android SQLite database.
+The Android app stores its database in Tauri's private app data directory. Android cloud backup and device-to-device data extraction are disabled for the app's private data. Miora does not need an account, cloud service, analytics SDK, or remote API. The browser preview uses localStorage only for local development and is separate from the Android SQLite database.
 
 ## License
 
