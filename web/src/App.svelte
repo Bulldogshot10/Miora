@@ -81,7 +81,7 @@
     return getDailyCheckin(date);
   }
 
-  async function handleBleedingStatus(stillBleeding: boolean): Promise<void> {
+  async function handleBleedingStatus(stillBleeding: boolean, lastBleedingDate: string | null): Promise<void> {
     const prompt = snapshot.bleedingPrompt;
     if (!prompt || busy) return;
 
@@ -92,10 +92,11 @@
         prompt.periodStart,
         prompt.checkDate,
         stillBleeding,
+        lastBleedingDate,
       );
       statusMessage = stillBleeding
         ? "Bleeding noted for today. Miora will check again tomorrow."
-        : "Bleeding end confirmed. Her personal model has been updated.";
+        : "Bleeding end confirmed. Your personal model has been updated.";
     } catch (error) {
       statusMessage = "Couldn't update bleeding status: " +
         (error instanceof Error ? error.message : String(error));
