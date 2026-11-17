@@ -15,23 +15,61 @@ if (!packageName || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(pa
   throw new Error("tauri.conf.json must contain a valid Android package identifier.");
 }
 
-const manifest = await readFile(manifestPath, "utf8");
+let manifest = await readFile(manifestPath, "utf8");
 const receiverName = packageName + ".MioraWidgetProvider";
-const receiverDeclaration = [
-  '        <receiver android:name="' + receiverName + '" android:exported="true" android:label="Miora Daily Check-in">',
-  '            <intent-filter>',
-  '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />',
-  '            </intent-filter>',
-  '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/miora_daily_checkin_widget_info" />',
-  '        </receiver>',
-].join("\n");
+const actionReceiverName = packageName + ".MioraWidgetActionReceiver";
 
+// Cycle and symptom records are sensitive. Disable Android cloud backup and
+// device-to-device transfer at the manifest and resource-rule levels.
+const applicationStart = manifest.indexOf("<application");
+const applicationTagEnd = manifest.indexOf(">", applicationStart);
+if (applicationStart < 0 || applicationTagEnd < 0) {
+  throw new Error("Could not find the application element in the generated Android manifest.");
+}
+let applicationTag = manifest.slice(applicationStart, applicationTagEnd + 1);
+for (const [attribute, value] of [
+  ["android:allowBackup", "false"],
+  ["android:fullBackupContent", "@xml/miora_backup_rules"],
+  ["android:dataExtractionRules", "@xml/miora_data_extraction_rules"],
+]) {
+  const attributeStart = applicationTag.indexOf(attribute + '="');
+  if (attributeStart >= 0) {
+    const valueStart = attributeStart + attribute.length + 2;
+    const valueEnd = applicationTag.indexOf('"', valueStart);
+    if (valueEnd < 0) throw new Error("Malformed Android application attribute: " + attribute);
+    applicationTag = applicationTag.slice(0, valueStart) + value + applicationTag.slice(valueEnd);
+  } else {
+    applicationTag = applicationTag.replace("<application", '<application ' + attribute + '="' + value + '"');
+  }
+}
+manifest = manifest.slice(0, applicationStart) + applicationTag + manifest.slice(applicationTagEnd + 1);
+
+const receiverDeclarations = [];
 if (!manifest.includes('android:name="' + receiverName + '"')) {
+  receiverDeclarations.push([
+    '        <receiver android:name="' + receiverName + '" android:exported="true" android:label="Miora Daily Check-in">',
+    '            <intent-filter>',
+    '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />',
+    '            </intent-filter>',
+    '            <meta-data android:name="android.appwidget.provider" android:resource="@xml/miora_daily_checkin_widget_info" />',
+    '        </receiver>',
+  ].join("\n"));
+}
+if (!manifest.includes('android:name="' + actionReceiverName + '"')) {
+  receiverDeclarations.push(
+    '        <receiver android:name="' + actionReceiverName + '" android:exported="false" />',
+  );
+}
+if (receiverDeclarations.length > 0) {
   if (!manifest.includes("</application>")) {
     throw new Error("Could not find the application element in the generated Android manifest.");
   }
-  await writeFile(manifestPath, manifest.replace("</application>", receiverDeclaration + "\n    </application>"));
+  manifest = manifest.replace(
+    "</application>",
+    receiverDeclarations.join("\n") + "\n    </application>",
+  );
 }
+await writeFile(manifestPath, manifest);
 
 const packagePath = packageName.split(".").join("/");
 const javaDir = resolve(generatedAndroidDir, "java", packagePath);
@@ -85,6 +123,14 @@ await copyFile(
 await copyFile(
   resolve(sourceDir, "miora_daily_checkin_widget_info.xml"),
   resolve(xmlDir, "miora_daily_checkin_widget_info.xml"),
+);
+await copyFile(
+  resolve(sourceDir, "miora_backup_rules.xml"),
+  resolve(xmlDir, "miora_backup_rules.xml"),
+);
+await copyFile(
+  resolve(sourceDir, "miora_data_extraction_rules.xml"),
+  resolve(xmlDir, "miora_data_extraction_rules.xml"),
 );
 await copyFile(resolve(sourceDir, "miora_widget_panel.xml"), resolve(drawableDir, "miora_widget_panel.xml"));
 await copyFile(resolve(sourceDir, "miora_widget_chip.xml"), resolve(drawableDir, "miora_widget_chip.xml"));

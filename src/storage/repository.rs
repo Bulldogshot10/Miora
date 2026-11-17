@@ -74,6 +74,27 @@ impl Repository {
 
         let start_text = start.format("%Y-%m-%d").to_string();
         let end_text = end.format("%Y-%m-%d").to_string();
+        let previous_observation: Option<String> = self
+            .database
+            .connection()
+            .query_row(
+                "SELECT last_bleeding_observation FROM periods WHERE start_date = ?1",
+                params![start_text],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if let Some(previous_observation) = previous_observation {
+            let previous_observation =
+                NaiveDate::parse_from_str(&previous_observation, "%Y-%m-%d")?;
+            if end < previous_observation {
+                return Err(
+                    "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
+                        .into(),
+                );
+            }
+        }
+
         let next_start: Option<String> = self.database.connection().query_row(
             "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
             params![start_text],

@@ -19,7 +19,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
-class MioraWidgetProvider : AppWidgetProvider() {
+open class MioraWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
         manager: AppWidgetManager,
@@ -32,6 +32,8 @@ class MioraWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         val action = intent.action ?: return
         if (!action.startsWith(ACTION_PREFIX)) return
+        // User actions are routed through the app-private receiver.
+        if (this !is MioraWidgetActionReceiver) return
 
         val widgetId = intent.getIntExtra(
             AppWidgetManager.EXTRA_APPWIDGET_ID,
@@ -75,13 +77,13 @@ class MioraWidgetProvider : AppWidgetProvider() {
             ACTION_SET_MOOD -> {
                 val score = intent.getStringExtra(EXTRA_VALUE)?.toIntOrNull() ?: return
                 if (score !in 1..5) return
-                saveDraft(context, widgetId, current.copy(mood = score))
+                saveDraft(context, widgetId, current.copy(mood = score), data.checkin)
             }
 
             ACTION_SET_ENERGY -> {
                 val score = intent.getStringExtra(EXTRA_VALUE)?.toIntOrNull() ?: return
                 if (score !in 1..5) return
-                saveDraft(context, widgetId, current.copy(energy = score))
+                saveDraft(context, widgetId, current.copy(energy = score), data.checkin)
             }
 
             ACTION_CYCLE_SYMPTOM -> {
@@ -95,7 +97,7 @@ class MioraWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
                 if (nextSeverity == 0) symptoms.remove(code) else symptoms[code] = nextSeverity
-                saveDraft(context, widgetId, current.copy(symptoms = symptoms))
+                saveDraft(context, widgetId, current.copy(symptoms = symptoms), data.checkin)
             }
 
             ACTION_SAVE -> {
@@ -118,8 +120,8 @@ class MioraWidgetProvider : AppWidgetProvider() {
         val views = RemoteViews(context.packageName, R.layout.miora_daily_checkin_widget)
         val data = readWidgetData(context)
         val prefs = preferences(context, widgetId)
-        val hasDraft = prefs.getBoolean(key("draft", widgetId), false)
         val state = visibleState(context, widgetId, data.checkin)
+        val hasDraft = prefs.getBoolean(key("draft", widgetId), false)
 
         views.setTextViewText(R.id.widget_date, displayToday())
         views.setTextViewText(R.id.widget_status, when {
@@ -228,6 +230,19 @@ class MioraWidgetProvider : AppWidgetProvider() {
             return saved ?: WidgetState(3, 3, emptyMap())
         }
 
+        // Drafts belong to a local calendar date; never carry yesterday's entry forward.
+        if (prefs.getString(key("draft_date", widgetId), null) != todayIso()) {
+            clearDraft(context, widgetId)
+            return saved ?: WidgetState(3, 3, emptyMap())
+        }
+
+        // If Miora itself saved a newer value, discard the stale widget draft.
+        val baseState = prefs.getString(key("draft_base", widgetId), "none")
+        if (baseState != encodeState(saved)) {
+            clearDraft(context, widgetId)
+            return saved ?: WidgetState(3, 3, emptyMap())
+        }
+
         return WidgetState(
             mood = prefs.getInt(key("mood", widgetId), saved?.mood ?: 3).coerceIn(1, 5),
             energy = prefs.getInt(key("energy", widgetId), saved?.energy ?: 3).coerceIn(1, 5),
@@ -237,9 +252,20 @@ class MioraWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun saveDraft(context: Context, widgetId: Int, state: WidgetState) {
-        preferences(context, widgetId).edit()
+    private fun saveDraft(
+        context: Context,
+        widgetId: Int,
+        state: WidgetState,
+        savedState: WidgetState?,
+    ) {
+        val prefs = preferences(context, widgetId)
+        val editor = prefs.edit()
+        if (!prefs.getBoolean(key("draft", widgetId), false)) {
+            editor.putString(key("draft_base", widgetId), encodeState(savedState))
+        }
+        editor
             .putBoolean(key("draft", widgetId), true)
+            .putString(key("draft_date", widgetId), todayIso())
             .putInt(key("mood", widgetId), state.mood)
             .putInt(key("energy", widgetId), state.energy)
             .putString(key("symptoms", widgetId), encodeSymptoms(state.symptoms))
@@ -247,18 +273,23 @@ class MioraWidgetProvider : AppWidgetProvider() {
             .apply()
     }
 
+    private fun encodeState(state: WidgetState?): String =
+        state?.let { "${it.mood}|${it.energy}|${encodeSymptoms(it.symptoms)}" } ?: "none"
+
     private fun clearDraft(context: Context, widgetId: Int) {
         preferences(context, widgetId).edit()
             .remove(key("draft", widgetId))
             .remove(key("mood", widgetId))
             .remove(key("energy", widgetId))
             .remove(key("symptoms", widgetId))
+            .remove(key("draft_date", widgetId))
+            .remove(key("draft_base", widgetId))
             .apply()
     }
 
     private fun databaseFile(context: Context): File {
-        // Tauri's Android path resolver maps app_data_dir() to Context.dataDir.
-        return File(context.dataDir, "miora.sqlite3")
+        // Tauri app_data_dir() is data_dir()/bundle identifier on Android.
+        return File(File(context.dataDir, context.packageName), "miora.sqlite3")
     }
 
     private fun todayIso(): String =
@@ -349,7 +380,7 @@ class MioraWidgetProvider : AppWidgetProvider() {
         actionName: String,
         value: String,
     ): PendingIntent {
-        val click = Intent(context, MioraWidgetProvider::class.java).apply {
+        val click = Intent(context, MioraWidgetActionReceiver::class.java).apply {
             action = actionName
             data = Uri.parse("miora-widget://" + widgetId + "/" + actionName + "/" + value)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -398,3 +429,6 @@ class MioraWidgetProvider : AppWidgetProvider() {
         private val worker = Executors.newSingleThreadExecutor()
     }
 }
+
+/** Private receiver used only by this app's immutable widget PendingIntents. */
+class MioraWidgetActionReceiver : MioraWidgetProvider()

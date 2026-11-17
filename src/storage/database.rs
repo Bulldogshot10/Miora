@@ -15,11 +15,12 @@ impl Database {
         }
 
         let connection = Connection::open(path)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         connection.execute_batch(
             "
             PRAGMA foreign_keys = ON;
             PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
+            PRAGMA synchronous = FULL;
             ",
         )?;
         migrations::migrate(&connection)?;
