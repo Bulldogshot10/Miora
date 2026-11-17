@@ -60,6 +60,9 @@ jobs:
       - name: Install Web dependencies
         run: npm install --prefix web --no-audit --no-fund
 
+      - name: Generate Tauri application icons
+        run: npm run tauri:icons --prefix web
+
       - name: Check Svelte and TypeScript
         run: npm run check --prefix web
 
