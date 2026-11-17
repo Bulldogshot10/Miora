@@ -99,7 +99,6 @@ pub struct SymptomInput {
     pub severity: i32,
 }
 
-
 #[derive(Debug, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum WidgetApiError {
@@ -179,8 +178,7 @@ pub fn widget_get_daily_checkin(
     let repository = Repository::open(Path::new(&database_path))
         .map_err(|error| WidgetApiError::Message(error.to_string()))?;
 
-    load_daily_checkin_from_repository(&repository, parsed_date)
-        .map_err(WidgetApiError::Message)
+    load_daily_checkin_from_repository(&repository, parsed_date).map_err(WidgetApiError::Message)
 }
 
 #[uniffi::export]
@@ -599,7 +597,6 @@ mod tests {
         NaiveDate::from_ymd_opt(year, month, day).unwrap()
     }
 
-
     #[test]
     fn widget_ffi_round_trip_uses_the_same_daily_checkin_repository() {
         let nonce = SystemTime::now()
@@ -614,8 +611,14 @@ mod tests {
             mood_score: 4,
             energy_score: 2,
             symptoms: vec![
-                SymptomInput { code: "cramps".to_string(), severity: 3 },
-                SymptomInput { code: "fatigue".to_string(), severity: 1 },
+                SymptomInput {
+                    code: "cramps".to_string(),
+                    severity: 3,
+                },
+                SymptomInput {
+                    code: "fatigue".to_string(),
+                    severity: 1,
+                },
             ],
         };
 
@@ -627,12 +630,14 @@ mod tests {
         assert_eq!(restored.mood_score, 4);
         assert_eq!(restored.energy_score, 2);
         assert_eq!(restored.symptoms.len(), 2);
-        assert!(restored.symptoms.iter().any(|entry| {
-            entry.code == "cramps" && entry.severity == 3
-        }));
-        assert!(restored.symptoms.iter().any(|entry| {
-            entry.code == "fatigue" && entry.severity == 1
-        }));
+        assert!(restored
+            .symptoms
+            .iter()
+            .any(|entry| { entry.code == "cramps" && entry.severity == 3 }));
+        assert!(restored
+            .symptoms
+            .iter()
+            .any(|entry| { entry.code == "fatigue" && entry.severity == 1 }));
 
         drop(restored);
         let _ = std::fs::remove_file(&path);
@@ -643,7 +648,6 @@ mod tests {
         shm.push("-shm");
         let _ = std::fs::remove_file(std::path::PathBuf::from(shm));
     }
-
 
     #[test]
     fn symptom_inference_uses_positive_and_negative_same_day_checkins() {
