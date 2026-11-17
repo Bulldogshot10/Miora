@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { ArrowRight, CalendarDays, ClipboardCheck, Droplets, Plus } from "@lucide/svelte";
   import type { DashboardSnapshot, Tab } from "$lib/types";
-  import { formatDate } from "$lib/utils";
+  import { formatDate, localDateIso } from "$lib/utils";
 
   let confirmingBleedingEnd = false;
   let lastBleedingDate = "";
@@ -13,6 +13,11 @@
   export let busy = false;
 
   let todayLabel = formatTodayLabel();
+  let todayIso = localDateIso();
+
+  $: predictionWindowPassed = Boolean(
+    snapshot.latestNextPeriodStart && snapshot.latestNextPeriodStart < todayIso,
+  );
 
   function formatTodayLabel(): string {
     return new Intl.DateTimeFormat(undefined, {
@@ -25,6 +30,7 @@
   onMount(() => {
     const updateTodayLabel = () => {
       todayLabel = formatTodayLabel();
+      todayIso = localDateIso();
     };
     window.addEventListener("miora:refresh-checkin", updateTodayLabel);
     return () => window.removeEventListener("miora:refresh-checkin", updateTodayLabel);
@@ -58,9 +64,17 @@
         <p class="cycle-detail">Your last period started on {formatDate(snapshot.lastPeriodStart, { year: "numeric" })}.</p>
         {#if snapshot.earliestNextPeriodStart && snapshot.latestNextPeriodStart}
           <div class="prediction-block">
-            <span class="prediction-label">NEXT PERIOD WINDOW</span>
+            <span class="prediction-label">
+              {predictionWindowPassed ? "PREDICTED WINDOW PASSED" : "NEXT PERIOD WINDOW"}
+            </span>
             <strong>{formatDate(snapshot.earliestNextPeriodStart)} – {formatDate(snapshot.latestNextPeriodStart)}</strong>
-            <span class="prediction-caption">Estimated from {snapshot.cyclesTracked} completed cycle intervals.</span>
+            <span class="prediction-caption">
+              {#if predictionWindowPassed}
+                This estimated window has ended. Log your next period start to update the model.
+              {:else}
+                Estimated from {snapshot.cyclesTracked} completed cycle intervals.
+              {/if}
+            </span>
           </div>
         {:else}
           <div class="prediction-block prediction-muted">
