@@ -68,6 +68,7 @@ fn apply_key(connection: &Connection, key_hex: &str) -> Result<(), rusqlite::Err
     // SQLCipher requires this PRAGMA before any other database query.
     let pragma = Zeroizing::new(format!(r#"PRAGMA key = "x'{key_hex}'";"#));
     connection.execute_batch(pragma.as_str())?;
+    connection.execute_batch("PRAGMA cipher_memory_security = ON;")?;
     connection.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
         row.get::<_, i64>(0)
     })?;
@@ -120,6 +121,8 @@ fn migrate_plaintext_database(
             PRAGMA journal_mode = DELETE;
             ",
         )?;
+        let source_user_version: i32 =
+            source.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
         // The path is a bound parameter. The key expression contains only
         // lowercase hex generated from the validated 32-byte random key.
@@ -131,6 +134,14 @@ fn migrate_plaintext_database(
             params![temporary_path.to_string_lossy().as_ref()],
         )?;
         source.execute_batch("SELECT sqlcipher_export('encrypted');")?;
+        // sqlcipher_export intentionally does not copy application metadata
+        // such as user_version. Preserve it or migrations may recreate tables.
+        source.pragma_update(Some("encrypted"), "user_version", source_user_version)?;
+        let exported_user_version: i32 =
+            source.query_row("PRAGMA encrypted.user_version", [], |row| row.get(0))?;
+        if exported_user_version != source_user_version {
+            return Err("SQLCipher migration did not preserve the database schema version.".into());
+        }
         source.execute_batch("DETACH DATABASE encrypted;")?;
         drop(source);
 
@@ -154,6 +165,11 @@ fn migrate_plaintext_database(
 
         let integrity: String =
             encrypted.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        let migrated_user_version: i32 =
+            encrypted.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if migrated_user_version != source_user_version {
+            return Err("SQLCipher migration changed the database schema version.".into());
+        }
         if integrity != "ok" {
             return Err(format!(
                 "SQLCipher migration failed SQLite integrity verification: {integrity}"
