@@ -1,4 +1,4 @@
-use chrono::{Datelike, NaiveDate};
+use jiff::{civil::Date as NaiveDate, ToSpan};
 
 use crate::domain::cycle::{cycle_day, cycle_length_days};
 use crate::engine::cycle_estimator::estimate_next_period;
@@ -43,7 +43,7 @@ impl AppState {
 
                 (
                     day,
-                    format!("Last period began {}", start.format("%d %b %Y")),
+                    format!("Last period began {}", start.strftime("%d %b %Y")),
                 )
             }
             None => (
@@ -55,12 +55,12 @@ impl AppState {
         let next_period_label = prediction
             .map(|value| {
                 if value.earliest_start == value.latest_start {
-                    format!("Expected around {}", value.expected_start.format("%d %b"))
+                    format!("Expected around {}", value.expected_start.strftime("%d %b"))
                 } else {
                     format!(
                         "Expected {}–{}",
-                        value.earliest_start.format("%d %b"),
-                        value.latest_start.format("%d %b")
+                        value.earliest_start.strftime("%d %b"),
+                        value.latest_start.strftime("%d %b")
                     )
                 }
             })
@@ -98,7 +98,7 @@ impl AppState {
             cycle_day_label,
             last_period_label,
             next_period_label,
-            calendar_month_label: today.format("%B %Y").to_string(),
+            calendar_month_label: today.strftime("%B %Y").to_string(),
             calendar_weeks: build_calendar_weeks(today, &starts),
             history_summary,
             cycles_tracked,
@@ -109,22 +109,15 @@ impl AppState {
 }
 
 fn build_calendar_weeks(today: NaiveDate, period_starts: &[NaiveDate]) -> Vec<[CalendarCell; 7]> {
-    let first_day = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+    let first_day = NaiveDate::new(today.year(), today.month(), 1)
         .expect("the current year and month always form a valid date");
 
-    let next_month = if today.month() == 12 {
-        NaiveDate::from_ymd_opt(today.year() + 1, 1, 1)
-    } else {
-        NaiveDate::from_ymd_opt(today.year(), today.month() + 1, 1)
-    }
-    .expect("the next month always forms a valid date");
-
-    let days_in_month = (next_month - first_day).num_days() as u32;
-    let leading_blanks = first_day.weekday().num_days_from_monday() as usize;
+    let days_in_month = today.days_in_month() as u32;
+    let leading_blanks = first_day.weekday().to_monday_zero_offset() as usize;
     let mut cells = vec![CalendarCell::default(); 42];
 
     for day in 1..=days_in_month {
-        let date = NaiveDate::from_ymd_opt(today.year(), today.month(), day)
+        let date = NaiveDate::new(today.year(), today.month(), day as i8)
             .expect("day is within the current month");
         let index = leading_blanks + day as usize - 1;
         let is_period_start = period_starts.contains(&date);
