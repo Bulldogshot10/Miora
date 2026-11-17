@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+    /^\s*<uses-permission android:name="android\.permission\.INTERNET"\s*\/>\s*$/gm,
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,7 +68,7 @@ if (releaseBuild) {
     );
   }
   const unmarkedInternetPermission = manifest
-    .split("\\n")
+    .split("\n")
     .some((line) =>
       line.includes('android:name="android.permission.INTERNET"') &&
       !line.includes('tools:node="remove"'),
