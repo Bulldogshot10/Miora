@@ -172,7 +172,10 @@ class MioraWidgetProvider : AppWidgetProvider() {
             clickIntent(context, widgetId, ACTION_SAVE, "today"),
         )
 
-        openAppIntent(context)?.let { views.setOnClickPendingIntent(R.id.widget_open_app, it) }
+        openAppIntent(context)?.let {
+            views.setOnClickPendingIntent(R.id.widget_brand, it)
+            views.setOnClickPendingIntent(R.id.widget_date, it)
+        }
         manager.updateAppWidget(widgetId, views)
     }
 
