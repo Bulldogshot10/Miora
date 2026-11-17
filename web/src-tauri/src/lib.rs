@@ -127,13 +127,12 @@ fn configured_database_key() -> Result<&'static [u8], String> {
 
 #[uniffi::export]
 pub fn configure_database_key(key: Vec<u8>) -> Result<(), WidgetApiError> {
+    let key = Zeroizing::new(key);
     if key.len() != 32 {
         return Err(WidgetApiError::Message(
             "The database encryption key must contain exactly 32 bytes.".to_string(),
         ));
     }
-
-    let key = Zeroizing::new(key);
     match DATABASE_KEY.set(key) {
         Ok(()) => Ok(()),
         Err(candidate) => {
@@ -605,13 +604,15 @@ fn initialize_desktop_database_key() -> Result<(), String> {
         return Ok(());
     }
 
-    let encoded = std::env::var("MIORA_DATABASE_KEY")
-        .map_err(|_| "Set MIORA_DATABASE_KEY to a persistent 64-character hexadecimal key.".to_string())?;
+    let encoded = Zeroizing::new(
+        std::env::var("MIORA_DATABASE_KEY")
+            .map_err(|_| "Set MIORA_DATABASE_KEY to a persistent 64-character hexadecimal key.".to_string())?,
+    );
     if encoded.len() != 64 || !encoded.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("MIORA_DATABASE_KEY must contain exactly 64 hexadecimal characters.".to_string());
     }
 
-    let mut key = Vec::with_capacity(32);
+    let mut key = Zeroizing::new(Vec::with_capacity(32));
     for pair in encoded.as_bytes().chunks_exact(2) {
         let pair = std::str::from_utf8(pair)
             .map_err(|_| "MIORA_DATABASE_KEY contains invalid hexadecimal data.".to_string())?;
@@ -622,7 +623,7 @@ fn initialize_desktop_database_key() -> Result<(), String> {
     }
 
     DATABASE_KEY
-        .set(Zeroizing::new(key))
+        .set(key)
         .map_err(|_| "The desktop database key was already initialized.".to_string())
 }
 
