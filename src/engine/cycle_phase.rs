@@ -16,6 +16,7 @@ pub enum CyclePhase {
     Follicular,
     OvulationWindow,
     Luteal,
+    Uncertain,
     Learning,
 }
 
@@ -26,6 +27,7 @@ impl CyclePhase {
             Self::Follicular => "follicular",
             Self::OvulationWindow => "ovulation_window",
             Self::Luteal => "luteal",
+            Self::Uncertain => "uncertain",
             Self::Learning => "learning",
         }
     }
@@ -36,6 +38,7 @@ impl CyclePhase {
             Self::Follicular => "Follicular phase",
             Self::OvulationWindow => "Estimated ovulation window",
             Self::Luteal => "Luteal phase",
+            Self::Uncertain => "Cycle timing uncertain",
             Self::Learning => "Still learning her cycle",
         }
     }
@@ -54,6 +57,9 @@ impl CyclePhase {
             Self::Luteal => {
                 "The model estimates that this day is most likely in the luteal phase, after ovulation."
             }
+            Self::Uncertain => {
+                "The current cycle day is beyond the lengths represented by the model. More recent period observations are needed to estimate the phase."
+            }
             Self::Learning => {
                 "The phase probabilities are still spread across multiple possibilities. More confirmed period dates and bleeding observations will improve the estimate."
             }
@@ -67,6 +73,7 @@ pub struct PhaseProbabilities {
     pub follicular: f64,
     pub ovulation_window: f64,
     pub luteal: f64,
+    pub uncertain: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +86,8 @@ pub struct CyclePhaseEstimate {
     pub confidence: f64,
     pub probabilities: PhaseProbabilities,
     pub is_personalized: bool,
+    pub cycle_history_available: bool,
+    pub bleeding_history_available: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -180,23 +189,27 @@ pub fn estimate_cycle_phase(
     let current_start = starts[current_start_index];
     let cycle_day = (date - current_start).num_days() as u32 + 1;
 
-    if let Some(observed_day) = observed_bleeding_through_day
-        && cycle_day <= observed_day
-    {
-        return Some(fixed_menstrual_estimate(
-            cycle_day,
-            confirmed_current_bleeding_days.is_none(),
-            starts.len().saturating_sub(1),
-            completed_bleeding_durations.len(),
-            true,
-        ));
-    }
-
     let observed_cycle_lengths: Vec<u32> = starts
         .windows(2)
         .filter_map(|pair| cycle_length_days(pair[0], pair[1]))
         .filter(|days| (MIN_CYCLE_LENGTH..=MAX_CYCLE_LENGTH).contains(days))
         .collect();
+    let cycle_history_available = !observed_cycle_lengths.is_empty();
+    let bleeding_history_available = confirmed_current_bleeding_days.is_some()
+        || observed_bleeding_through_day.is_some()
+        || !completed_bleeding_durations.is_empty();
+
+    if let Some(observed_day) = observed_bleeding_through_day
+        && cycle_day <= observed_day
+    {
+        return Some(fixed_menstrual_estimate(
+            cycle_day,
+            cycle_history_available,
+            true,
+            observed_cycle_lengths.len(),
+            completed_bleeding_durations.len(),
+        ));
+    }
 
     let mut cycle_posterior =
         CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.02);
@@ -206,7 +219,7 @@ pub fn estimate_cycle_phase(
 
     let bleeding_posterior = estimate_bleeding_duration(completed_bleeding_durations);
     let bleeding_distribution = if let Some(days) = confirmed_current_bleeding_days {
-        vec![(days.clamp(1, MAX_BLEEDING_DAYS), 1.0)]
+        vec![(days.max(1), 1.0)]
     } else {
         bleeding_posterior.distribution()
     };
@@ -220,6 +233,7 @@ pub fn estimate_cycle_phase(
         follicular: 0.0,
         ovulation_window: 0.0,
         luteal: 0.0,
+        uncertain: 0.0,
     };
 
     for (cycle_length, cycle_weight) in &cycle_distribution {
@@ -227,7 +241,9 @@ pub fn estimate_cycle_phase(
             for luteal_days in MIN_LUTEAL_LENGTH..=MAX_LUTEAL_LENGTH {
                 let weight = cycle_weight * bleeding_weight * luteal_weight;
                 let ovulation_day = cycle_length.saturating_sub(luteal_days).max(1);
-                let phase = if cycle_day <= *bleeding_days {
+                let phase = if cycle_day > *cycle_length {
+                    CyclePhase::Uncertain
+                } else if cycle_day <= *bleeding_days {
                     CyclePhase::Menstrual
                 } else if cycle_day + 1 < ovulation_day {
                     CyclePhase::Follicular
@@ -242,6 +258,7 @@ pub fn estimate_cycle_phase(
                     CyclePhase::Follicular => probabilities.follicular += weight,
                     CyclePhase::OvulationWindow => probabilities.ovulation_window += weight,
                     CyclePhase::Luteal => probabilities.luteal += weight,
+                    CyclePhase::Uncertain => probabilities.uncertain += weight,
                     CyclePhase::Learning => {}
                 }
             }
@@ -255,6 +272,7 @@ pub fn estimate_cycle_phase(
         (CyclePhase::Follicular, probabilities.follicular),
         (CyclePhase::OvulationWindow, probabilities.ovulation_window),
         (CyclePhase::Luteal, probabilities.luteal),
+        (CyclePhase::Uncertain, probabilities.uncertain),
     ];
     let (most_likely_phase, confidence) = candidates
         .into_iter()
@@ -271,8 +289,7 @@ pub fn estimate_cycle_phase(
     } else {
         cycle_posterior.expected_length().round() as u32
     };
-    let is_personalized =
-        !observed_cycle_lengths.is_empty() && !completed_bleeding_durations.is_empty();
+    let is_personalized = cycle_history_available || bleeding_history_available;
 
     Some(CyclePhaseEstimate {
         phase,
@@ -283,15 +300,17 @@ pub fn estimate_cycle_phase(
         confidence,
         probabilities,
         is_personalized,
+        cycle_history_available,
+        bleeding_history_available,
     })
 }
 
 fn fixed_menstrual_estimate(
     cycle_day: u32,
-    bleeding_duration_is_estimated: bool,
+    cycle_history_available: bool,
+    bleeding_history_available: bool,
     completed_intervals_used: usize,
     completed_bleeding_durations_used: usize,
-    is_personalized: bool,
 ) -> CyclePhaseEstimate {
     CyclePhaseEstimate {
         phase: CyclePhase::Menstrual,
@@ -305,8 +324,11 @@ fn fixed_menstrual_estimate(
             follicular: 0.0,
             ovulation_window: 0.0,
             luteal: 0.0,
+            uncertain: 0.0,
         },
-        is_personalized: is_personalized && !bleeding_duration_is_estimated,
+        is_personalized: cycle_history_available || bleeding_history_available,
+        cycle_history_available,
+        bleeding_history_available,
     }
 }
 
@@ -314,7 +336,8 @@ fn normalize_probabilities(probabilities: &mut PhaseProbabilities) {
     let total = probabilities.menstrual
         + probabilities.follicular
         + probabilities.ovulation_window
-        + probabilities.luteal;
+        + probabilities.luteal
+        + probabilities.uncertain;
 
     if total <= f64::EPSILON {
         return;
