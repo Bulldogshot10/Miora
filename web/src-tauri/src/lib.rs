@@ -523,3 +523,49 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("failed to run Miora");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn date(year: i32, month: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    }
+
+    #[test]
+    fn symptom_inference_uses_positive_and_negative_same_day_checkins() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("miora-symptoms-{nonce}.sqlite3"));
+        let repository = Repository::open(&path).unwrap();
+
+        let starts = [
+            date(2026, 1, 1),
+            date(2026, 1, 29),
+            date(2026, 2, 26),
+        ];
+        for start in starts {
+            repository.add_period_start(start).unwrap();
+        }
+
+        let cramps = [SymptomEntry {
+            code: SymptomCode::Cramps,
+            severity: Severity::Moderate,
+        }];
+        repository.save_daily_checkin(date(2026, 1, 3), 3, 3, &cramps).unwrap();
+        repository.save_daily_checkin(date(2026, 1, 31), 3, 3, &[]).unwrap();
+        repository.save_daily_checkin(date(2026, 2, 28), 3, 3, &cramps).unwrap();
+
+        let patterns = symptom_patterns_for_cycle_day(&repository, &starts, 3).unwrap();
+        let cramps_pattern = patterns.iter().find(|pattern| pattern.code == "cramps").unwrap();
+
+        assert_eq!(cramps_pattern.observations_used, 3);
+        assert!((cramps_pattern.probability - 0.6).abs() < 1e-9);
+
+        drop(repository);
+        let _ = std::fs::remove_file(path);
+    }
+}
