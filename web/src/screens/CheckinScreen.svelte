@@ -192,7 +192,7 @@
       {/if}
     </p>
     {#if loadError}
-      <button class="button button-secondary button-full" type="button" onclick={loadSelectedDate}>
+      <button class="button button-outline button-full" type="button" onclick={loadSelectedDate}>
         Retry loading this date
       </button>
     {/if}
