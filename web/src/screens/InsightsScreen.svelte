@@ -36,6 +36,22 @@
     </section>
   </div>
 
+  {#if snapshot.phase && snapshot.symptomPatterns.length > 0}
+    <section class="surface-card history-card" aria-label="Symptom patterns for the current cycle day">
+      <p class="eyebrow">SYMPTOM PATTERNS · CYCLE DAY {snapshot.phase.cycleDay}</p>
+      <p class="section-description">Likelihood based on your saved check-ins from the same cycle day in previous recorded cycles.</p>
+      <div class="recorded-dates">
+        {#each snapshot.symptomPatterns as pattern (pattern.code)}
+          <div class="recorded-date">
+            <span>{pattern.label}</span>
+            <strong>{Math.round(pattern.probability * 100)}%</strong>
+            <span class="insight-footnote">{pattern.observationsUsed} check-ins</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
   <section class="surface-card history-card">
     <p class="eyebrow">RECORDED PERIOD STARTS</p>
     {#if snapshot.periodStarts.length > 0}
