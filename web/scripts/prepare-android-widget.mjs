@@ -49,7 +49,7 @@ manifest = manifest.slice(0, applicationStart) + applicationTag + manifest.slice
 // A release build has no Android INTERNET permission at all. The tools marker
 // removes it from the merged manifest, including transitive library manifests.
 if (releaseBuild) {
-  if (!manifest.includes('android:name="android.permission.INTERNET" tools:node="remove"')) {
+      '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>',
     if (!manifest.includes('xmlns:tools=')) {
       manifest = manifest.replace(
         "<manifest",
@@ -58,7 +58,7 @@ if (releaseBuild) {
     }
     manifest = manifest.replace(
       "</manifest>",
-      '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\\n</manifest>',
+      '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>',
     );
   }
 }
@@ -231,7 +231,7 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
   }
   mainActivity = mainActivity.replace(
     importMarker,
-    importMarker + "\\nimport " + packageName + ".uniffi.configureDatabaseKey as configureRustDatabaseKey",
+    importMarker + "\nimport " + packageName + ".uniffi.configureDatabaseKey as configureRustDatabaseKey",
   );
 
   const onCreate = `  override fun onCreate(savedInstanceState: Bundle?) {
@@ -257,8 +257,8 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 
 let gradle = await readFile(gradlePath, "utf8");
 gradle = gradle.replace(
-  /manifestPlaceholders\\["usesCleartextTraffic"\\] = true/g,
-  'manifestPlaceholders["usesCleartextTraffic"] = false',
+  /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
+  /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
 );
 if (!gradle.includes("net.java.dev.jna:jna:")) {
   const dependencyBlock = gradle.match(/dependencies\s*\{/);
