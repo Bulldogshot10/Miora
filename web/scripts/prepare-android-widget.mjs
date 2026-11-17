@@ -116,6 +116,14 @@ await copyFile(
   resolve(sourceDir, "MioraWidgetProvider.kt"),
   resolve(javaDir, "MioraWidgetProvider.kt"),
 );
+const keyStoreSource = await readFile(
+  resolve(sourceDir, "MioraDatabaseKeyStore.kt"),
+  "utf8",
+);
+await writeFile(
+  resolve(javaDir, "MioraDatabaseKeyStore.kt"),
+  keyStoreSource.replace("package __PACKAGE__", "package " + packageName),
+);
 await copyFile(
   resolve(sourceDir, "miora_daily_checkin_widget.xml"),
   resolve(layoutDir, "miora_daily_checkin_widget.xml"),
@@ -189,6 +197,39 @@ const generatedBindings = await copyGeneratedKotlin(bindingsOutput, javaRoot);
 await rm(bindingsOutput, { recursive: true, force: true });
 if (generatedBindings === 0) {
   throw new Error("UniFFI did not generate any Kotlin source files.");
+}
+
+const mainActivityPath = resolve(javaDir, "MainActivity.kt");
+let mainActivity = await readFile(mainActivityPath, "utf8");
+if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
+  const importMarker = "import androidx.activity.enableEdgeToEdge";
+  if (!mainActivity.includes(importMarker)) {
+    throw new Error("Could not locate the Tauri MainActivity import section.");
+  }
+  mainActivity = mainActivity.replace(
+    importMarker,
+    importMarker + "\\nimport " + packageName + ".uniffi.configureDatabaseKey as configureRustDatabaseKey",
+  );
+
+  const onCreate = `  override fun onCreate(savedInstanceState: Bundle?) {
+    enableEdgeToEdge()
+    super.onCreate(savedInstanceState)
+  }`;
+  const secureOnCreate = `  override fun onCreate(savedInstanceState: Bundle?) {
+    val databaseKey = MioraDatabaseKeyStore.getOrCreateDatabaseKey(applicationContext)
+    try {
+      configureRustDatabaseKey(databaseKey)
+    } finally {
+      databaseKey.fill(0)
+    }
+    enableEdgeToEdge()
+    super.onCreate(savedInstanceState)
+  }`;
+  if (!mainActivity.includes(onCreate)) {
+    throw new Error("Could not locate Tauri MainActivity.onCreate to initialize the database key.");
+  }
+  mainActivity = mainActivity.replace(onCreate, secureOnCreate);
+  await writeFile(mainActivityPath, mainActivity);
 }
 
 let gradle = await readFile(gradlePath, "utf8");
