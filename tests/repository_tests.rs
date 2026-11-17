@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -187,7 +188,7 @@ fn database_is_encrypted_and_rejects_an_incorrect_key() {
         .unwrap()
         .read_exact(&mut header)
         .unwrap();
-    assert_ne!(&header, b"SQLite format 3\\0");
+    assert_ne!(&header, b"SQLite format 3\0");
 
     let raw_connection = Connection::open(&path).unwrap();
     assert!(
@@ -247,7 +248,7 @@ fn migration_imports_legacy_period_starts() {
         .unwrap()
         .read_exact(&mut header)
         .unwrap();
-    assert_ne!(&header, b"SQLite format 3\\0");
+    assert_ne!(&header, b"SQLite format 3\0");
 
     let _ = std::fs::remove_file(path);
 }
