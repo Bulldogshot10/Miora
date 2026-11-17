@@ -79,7 +79,7 @@ npm run tauri:android:init
 npm run tauri:android:build
 ~~~
 
-Vite's development server binds to loopback by default. Tauri's `TAURI_DEV_HOST` is the only path that exposes it for physical-device development; use that mode only on a trusted network. The dependency audit documents one unresolved high-severity ReDoS advisory in the transitive, development-only `picomatch` dependency (GHSA-fc5q-39xc-vjpf). No fixed upstream release is currently published. CI/release audit permits only that exact advisory and its `fdir` propagation; every other high/critical npm advisory fails the build.
+Vite and preview bind to loopback only. Android devices reach the development server through the ADB reverse mappings documented below; no LAN listener is started. The dependency audit documents one unresolved high-severity ReDoS advisory in the transitive, development-only `picomatch` dependency (GHSA-fc5q-39xc-vjpf). No fixed upstream release is currently published. CI/release audit permits only that exact advisory and its `fdir` propagation; every other high/critical npm advisory fails the build.
 
 The debug APK is generated under:
 
