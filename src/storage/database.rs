@@ -66,7 +66,8 @@ fn hex_key(key: &[u8]) -> String {
 fn apply_key(connection: &Connection, key_hex: &str) -> Result<(), rusqlite::Error> {
     // The key is exactly 32 random bytes rendered as validated hexadecimal.
     // SQLCipher requires this PRAGMA before any other database query.
-    connection.execute_batch(&format!(r#"PRAGMA key = "x'{key_hex}'";"#))?;
+    let pragma = Zeroizing::new(format!(r#"PRAGMA key = "x'{key_hex}'";"#));
+    connection.execute_batch(pragma.as_str())?;
     connection.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
         row.get::<_, i64>(0)
     })?;
@@ -112,6 +113,7 @@ fn migrate_plaintext_database(
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         // Flush the old plaintext WAL and close the journal before exporting.
         let source = Connection::open(path)?;
+        source.busy_timeout(std::time::Duration::from_secs(5))?;
         source.execute_batch(
             "
             PRAGMA wal_checkpoint(TRUNCATE);
@@ -121,8 +123,8 @@ fn migrate_plaintext_database(
 
         // The path is a bound parameter. The key expression contains only
         // lowercase hex generated from the validated 32-byte random key.
-        let attach = format!(r#"ATTACH DATABASE ?1 AS encrypted KEY "x'{key_hex}'";"#);
-        source.execute(&attach, params![temporary_path.to_string_lossy().as_ref()])?;
+        let attach = Zeroizing::new(format!(r#"ATTACH DATABASE ?1 AS encrypted KEY "x'{key_hex}'";"#));
+        source.execute(attach.as_str(), params![temporary_path.to_string_lossy().as_ref()])?;
         source.execute_batch("SELECT sqlcipher_export('encrypted');")?;
         source.execute_batch("DETACH DATABASE encrypted;")?;
         drop(source);
@@ -132,10 +134,11 @@ fn migrate_plaintext_database(
         let encrypted = Connection::open(&temporary_path)?;
         apply_key(&encrypted, key_hex)?;
 
-        let cipher_issues = encrypted
-            .prepare("PRAGMA cipher_integrity_check")?
+        let mut cipher_statement = encrypted.prepare("PRAGMA cipher_integrity_check")?;
+        let cipher_issues = cipher_statement
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
+        drop(cipher_statement);
         if !cipher_issues.is_empty() {
             return Err(format!(
                 "SQLCipher migration failed page-integrity verification: {}",
