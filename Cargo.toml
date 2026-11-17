@@ -1,0 +1,58 @@
+[package]
+name = "miora"
+version = "0.1.0"
+edition = "2024"
+description = "A private, offline-first menstrual cycle and symptom tracker."
+license = "MIT"
+build = "build.rs"
+
+[lib]
+name = "miora"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "miora"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
+rusqlite = { version = "0.43.0", features = ["bundled"] }
+slint = { version = "1.19.0", default-features = false, features = [
+    "std",
+    "compat-1-18",
+    "renderer-software",
+    "backend-android-activity-06",
+] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+slint = { version = "1.19.0", default-features = false, features = ["backend-winit"] }
+
+[build-dependencies]
+slint-build = "1.19.0"
+
+[package.metadata.android]
+package = "com.bulldogshot10.miora"
+apk_name = "miora"
+strip = "strip"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+
+[[package.metadata.android.application.activity]]
+name = "android.app.NativeActivity"
+config_changes = "orientation|keyboardHidden|screenSize"
+exported = true
+
+[[package.metadata.android.application.activity.meta_data]]
+name = "android.app.lib_name"
+value = "miora"
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.MAIN"]
+categories = ["android.intent.category.LAUNCHER"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
