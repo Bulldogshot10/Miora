@@ -47,7 +47,12 @@ fn bleeding_completion_requires_an_explicit_last_day() {
             .report_bleeding_status(start, date(2026, 11, 9), false, None)
             .is_err()
     );
-    assert!(repository.confirmed_bleeding_durations().unwrap().is_empty());
+    assert!(
+        repository
+            .confirmed_bleeding_durations()
+            .unwrap()
+            .is_empty()
+    );
 
     drop(repository);
     let _ = std::fs::remove_file(path);
@@ -60,7 +65,9 @@ fn new_period_start_cannot_overlap_previous_bleeding() {
     let first_start = date(2026, 11, 1);
 
     repository.add_period_start(first_start).unwrap();
-    repository.set_period_end(first_start, date(2026, 11, 10)).unwrap();
+    repository
+        .set_period_end(first_start, date(2026, 11, 10))
+        .unwrap();
 
     assert!(repository.add_period_start(date(2026, 11, 8)).is_err());
 
@@ -98,8 +105,12 @@ fn daily_checkin_query_includes_days_without_symptoms() {
         severity: Severity::Moderate,
     }];
 
-    repository.save_daily_checkin(first_day, 3, 4, &cramps).unwrap();
-    repository.save_daily_checkin(second_day, 4, 3, &[]).unwrap();
+    repository
+        .save_daily_checkin(first_day, 3, 4, &cramps)
+        .unwrap();
+    repository
+        .save_daily_checkin(second_day, 4, 3, &[])
+        .unwrap();
 
     let records = repository.daily_checkins_with_symptoms().unwrap();
     assert_eq!(records.len(), 2);
