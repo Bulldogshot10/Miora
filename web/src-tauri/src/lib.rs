@@ -1,7 +1,9 @@
-use std::{path::Path, sync::{Mutex, OnceLock}};
+use std::{
+    path::Path,
+    sync::{Mutex, OnceLock},
+};
 
 use jiff::{civil::Date as NaiveDate, Zoned};
-use zeroize::Zeroizing;
 use miora::domain::{
     cycle::{cycle_day, cycle_length_days},
     symptom::{Severity, SymptomCode, SymptomEntry},
@@ -15,6 +17,7 @@ use miora::engine::{
 use miora::storage::repository::{PeriodBleedingRecord, Repository};
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
+use zeroize::Zeroizing;
 
 uniffi::setup_scaffolding!();
 
@@ -180,7 +183,9 @@ fn save_daily_checkin_to_repository(
     repository: &Repository,
     input: DailyCheckinInput,
 ) -> Result<(), String> {
-    let date = input.date.parse::<NaiveDate>()
+    let date = input
+        .date
+        .parse::<NaiveDate>()
         .map_err(|_| "Choose a valid check-in date.".to_string())?;
 
     if date > Zoned::now().date() {
@@ -208,7 +213,8 @@ pub fn widget_get_daily_checkin(
     database_path: String,
     date: String,
 ) -> Result<Option<DailyCheckinInput>, WidgetApiError> {
-    let parsed_date = date.parse::<NaiveDate>()
+    let parsed_date = date
+        .parse::<NaiveDate>()
         .map_err(|_| WidgetApiError::Message("Choose a valid check-in date.".to_string()))?;
     let key = configured_database_key().map_err(WidgetApiError::Message)?;
     let repository = Repository::open(Path::new(&database_path), key)
@@ -430,14 +436,8 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
         cycles_tracked: intervals.len(),
         average_cycle_length: mean(&intervals),
         checkins_tracked,
-        period_starts: starts
-            .iter()
-            .map(|date| date.to_string())
-            .collect(),
-        checkin_dates: checkin_dates
-            .iter()
-            .map(|date| date.to_string())
-            .collect(),
+        period_starts: starts.iter().map(|date| date.to_string()).collect(),
+        checkin_dates: checkin_dates.iter().map(|date| date.to_string()).collect(),
         phase,
         symptom_patterns,
         bleeding_prompt,
@@ -459,7 +459,8 @@ fn log_period_start(
     end_date: Option<String>,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
-    let parsed_start = date.parse::<NaiveDate>()
+    let parsed_start = date
+        .parse::<NaiveDate>()
         .map_err(|_| "Choose a valid period start date.".to_string())?;
 
     let today = Zoned::now().date();
@@ -522,9 +523,11 @@ fn report_bleeding_status(
     last_bleeding_date: Option<String>,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
-    let start = period_start.parse::<NaiveDate>()
+    let start = period_start
+        .parse::<NaiveDate>()
         .map_err(|_| "The period start date is invalid.".to_string())?;
-    let observation_date = date.parse::<NaiveDate>()
+    let observation_date = date
+        .parse::<NaiveDate>()
         .map_err(|_| "The bleeding check date is invalid.".to_string())?;
     let parsed_last_bleeding_date = last_bleeding_date
         .filter(|value| !value.is_empty())
@@ -573,7 +576,8 @@ fn get_daily_checkin(
     date: String,
     backend: State<'_, BackendState>,
 ) -> Result<Option<DailyCheckinInput>, String> {
-    let parsed = date.parse::<NaiveDate>()
+    let parsed = date
+        .parse::<NaiveDate>()
         .map_err(|_| "Choose a valid check-in date.".to_string())?;
 
     let repository = backend
@@ -604,12 +608,13 @@ fn initialize_desktop_database_key() -> Result<(), String> {
         return Ok(());
     }
 
-    let encoded = Zeroizing::new(
-        std::env::var("MIORA_DATABASE_KEY")
-            .map_err(|_| "Set MIORA_DATABASE_KEY to a persistent 64-character hexadecimal key.".to_string())?,
-    );
+    let encoded = Zeroizing::new(std::env::var("MIORA_DATABASE_KEY").map_err(|_| {
+        "Set MIORA_DATABASE_KEY to a persistent 64-character hexadecimal key.".to_string()
+    })?);
     if encoded.len() != 64 || !encoded.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("MIORA_DATABASE_KEY must contain exactly 64 hexadecimal characters.".to_string());
+        return Err(
+            "MIORA_DATABASE_KEY must contain exactly 64 hexadecimal characters.".to_string(),
+        );
     }
 
     let mut key = Zeroizing::new(Vec::with_capacity(32));
@@ -632,17 +637,17 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             #[cfg(not(target_os = "android"))]
-            initialize_desktop_database_key()
-                .map_err(std::io::Error::other)?;
+            initialize_desktop_database_key().map_err(std::io::Error::other)?;
 
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
 
-            let database_key = DATABASE_KEY
-                .get()
-                .ok_or_else(|| std::io::Error::other("Android Keystore database key is not initialized"))?;
-            let repository = Repository::open(&app_data_dir.join("miora.sqlite3"), database_key.as_slice())
-                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let database_key = DATABASE_KEY.get().ok_or_else(|| {
+                std::io::Error::other("Android Keystore database key is not initialized")
+            })?;
+            let repository =
+                Repository::open(&app_data_dir.join("miora.sqlite3"), database_key.as_slice())
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
 
             app.manage(BackendState {
                 repository: Mutex::new(repository),
