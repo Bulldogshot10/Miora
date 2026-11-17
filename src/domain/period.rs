@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlowIntensity {
