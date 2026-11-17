@@ -37,6 +37,7 @@ strip = "strip"
 
 [package.metadata.android.sdk]
 min_sdk_version = 26
+target_sdk_version = 37
 
 [[package.metadata.android.application.activity]]
 name = "android.app.NativeActivity"
