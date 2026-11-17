@@ -33,7 +33,7 @@ Install a recent stable Rust toolchain, then run:
 cargo run
 ~~~
 
-The development database is created in \`.miora/miora.sqlite3\` under the current project directory.
+The development database is created in `.miora/miora.sqlite3` under the current project directory.
 
 ## Build for Android
 
@@ -45,9 +45,9 @@ rustup target add aarch64-linux-android
 
 Install the Android SDK and NDK r30 or newer, then configure:
 
-- \`ANDROID_HOME\`
-- \`ANDROID_NDK_ROOT\`
-- \`JAVA_HOME\` (when \`javac\` is not already available in \`PATH\`)
+- `ANDROID_HOME`
+- `ANDROID_NDK_ROOT`
+- `JAVA_HOME` (when `javac` is not already available in `PATH`)
 
 Install cargo-apk2:
 
@@ -61,7 +61,7 @@ Build a release APK:
 cargo apk2 build --target aarch64-linux-android --lib --release
 ~~~
 
-The APK is placed under \`target/release/apk/\`.
+The APK is placed under `target/release/apk/`.
 
 To install and launch on a connected device:
 
@@ -69,29 +69,29 @@ To install and launch on a connected device:
 cargo apk2 run --target aarch64-linux-android --lib
 ~~~
 
-Slint's Android backend uses \`NativeActivity\` and requires Android API 26 or newer.
+Slint's Android backend uses `NativeActivity` and requires Android API 26 or newer.
 
 ## CI and releases
 
-GitHub Actions runs formatting, unit tests, Clippy, and an Android debug APK build on pushes and pull requests targeting \`main\`.
+GitHub Actions runs formatting, unit tests, Clippy, and an Android debug APK build on pushes and pull requests targeting `main`.
 
-Pushing a version tag such as \`v0.1.0\` triggers the release workflow. Before creating a release tag, add these repository Actions secrets:
+Pushing a version tag such as `v0.1.0` triggers the release workflow. Before creating a release tag, add these repository Actions secrets:
 
-- \`ANDROID_KEYSTORE_BASE64\`: the release keystore file encoded as Base64.
-- \`ANDROID_KEYSTORE_PASSWORD\`: the keystore password.
+- `ANDROID_KEYSTORE_BASE64`: the release keystore file encoded as Base64.
+- `ANDROID_KEYSTORE_PASSWORD`: the keystore password.
 
 Create a persistent signing keystore once and keep a secure backup. Do not generate a new release key for each build. For example:
 
 ~~~sh
-keytool -genkeypair -v \\
-  -keystore miora-release.jks \\
-  -alias miora \\
-  -keyalg RSA \\
-  -keysize 2048 \\
+keytool -genkeypair -v \
+  -keystore miora-release.jks \
+  -alias miora \
+  -keyalg RSA \
+  -keysize 2048 \
   -validity 10000
 ~~~
 
-Encode it for the \`ANDROID_KEYSTORE_BASE64\` secret:
+Encode it for the `ANDROID_KEYSTORE_BASE64` secret:
 
 ~~~sh
 base64 -w 0 miora-release.jks
