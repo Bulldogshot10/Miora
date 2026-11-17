@@ -256,8 +256,8 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 
 let gradle = await readFile(gradlePath, "utf8");
 gradle = gradle.replace(
-  'manifestPlaceholders["usesCleartextTraffic"] = false',
   /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
+  'manifestPlaceholders["usesCleartextTraffic"] = false',
 );
 if (!gradle.includes("net.java.dev.jna:jna:")) {
   const dependencyBlock = gradle.match(/dependencies\s*\{/);
