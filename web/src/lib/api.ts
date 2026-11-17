@@ -441,7 +441,25 @@ export async function logPeriodStart(
     return invoke<DashboardSnapshot>("log_period_start", { date, endDate });
   }
 
+  const today = toLocalIso(new Date());
+  if (date > today) throw new Error("A period start date cannot be in the future.");
+
   const starts = readStoredDates();
+  const ends = readPeriodEnds();
+  const overlapsPrevious = starts.some((start) => start < date && ends[start] && ends[start] >= date);
+  if (overlapsPrevious) {
+    throw new Error("The new period start overlaps a previously recorded bleeding interval.");
+  }
+
+  if (endDate) {
+    if (endDate < date) throw new Error("The last bleeding day must be on or after the first day.");
+    if (endDate > today) throw new Error("The last bleeding day cannot be in the future.");
+    const nextStart = starts.find((start) => start > date);
+    if (nextStart && endDate >= nextStart) {
+      throw new Error("The last bleeding day must be before the next recorded period start.");
+    }
+  }
+
   if (!starts.includes(date)) {
     starts.push(date);
     starts.sort();
@@ -449,8 +467,6 @@ export async function logPeriodStart(
   }
 
   if (endDate) {
-    if (endDate < date) throw new Error("The last bleeding day must be on or after the first day.");
-    const ends = readPeriodEnds();
     ends[date] = endDate;
     localStorage.setItem(PERIOD_END_STORAGE_KEY, JSON.stringify(ends));
     const states = readBleedingStates();
@@ -479,13 +495,16 @@ export async function reportBleedingStatus(
   const today = toLocalIso(new Date());
   if (date !== today) throw new Error("Refresh the dashboard before answering the bleeding check.");
 
+  const starts = readStoredDates();
+  if (starts.at(-1) !== periodStart) {
+    throw new Error("The current period changed. Refresh and try again.");
+  }
+
   const states = readBleedingStates();
   const ends = readPeriodEnds();
-  const existing = states[periodStart] ?? {
-    lastObservation: null,
-    endDate: null,
-    confirmed: false,
-  };
+  if (states[periodStart]?.confirmed === true) {
+    throw new Error("This period has already been marked as finished.");
+  }
 
   if (stillBleeding) {
     states[periodStart] = {
