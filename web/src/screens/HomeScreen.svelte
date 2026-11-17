@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { ArrowRight, CalendarDays, ClipboardCheck, Droplets, Plus } from "@lucide/svelte";
   import type { DashboardSnapshot, Tab } from "$lib/types";
   import { formatDate } from "$lib/utils";
@@ -11,11 +12,23 @@
   export let onBleedingStatus: (stillBleeding: boolean, lastBleedingDate: string | null) => void;
   export let busy = false;
 
-  const todayLabel = new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(new Date());
+  let todayLabel = formatTodayLabel();
+
+  function formatTodayLabel(): string {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(new Date());
+  }
+
+  onMount(() => {
+    const updateTodayLabel = () => {
+      todayLabel = formatTodayLabel();
+    };
+    window.addEventListener("miora:refresh-checkin", updateTodayLabel);
+    return () => window.removeEventListener("miora:refresh-checkin", updateTodayLabel);
+  });
 </script>
 
 <section class="screen home-screen">
@@ -180,7 +193,12 @@
             class="button button-primary"
             type="button"
             disabled={busy || !lastBleedingDate}
-            onclick={() => onBleedingStatus(false, lastBleedingDate)}
+            onclick={() => {
+              const confirmedDate = lastBleedingDate;
+              confirmingBleedingEnd = false;
+              lastBleedingDate = "";
+              onBleedingStatus(false, confirmedDate);
+            }}
           >
             Confirm last bleeding day
           </button>

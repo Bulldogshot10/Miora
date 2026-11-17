@@ -101,6 +101,25 @@ fn new_period_start_cannot_overlap_previous_bleeding() {
 }
 
 #[test]
+fn period_end_cannot_backdate_before_a_prior_bleeding_observation() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path).unwrap();
+    let start = date(2026, 11, 1);
+
+    repository.add_period_start(start).unwrap();
+    repository
+        .report_bleeding_status(start, date(2026, 11, 8), true, None)
+        .unwrap();
+
+    assert!(repository.set_period_end(start, date(2026, 11, 7)).is_err());
+    repository.set_period_end(start, date(2026, 11, 8)).unwrap();
+    assert_eq!(repository.confirmed_bleeding_durations().unwrap(), vec![8]);
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn period_end_must_precede_the_next_period_start() {
     let path = temporary_database_path();
     let repository = Repository::open(&path).unwrap();

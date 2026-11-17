@@ -15,6 +15,7 @@
   let selectedSymptoms: Record<string, number> = {};
   let loadingDate = false;
   let hasExistingCheckin = false;
+  let hasUnsavedChanges = false;
   let dateMessage = "";
   let loadSequence = 0;
   let submitState: "idle" | "success" | "error" = "idle";
@@ -44,9 +45,18 @@
 
   onMount(() => {
     void loadSelectedDate();
+    window.addEventListener("miora:refresh-checkin", handleExternalRefresh);
+    return () => window.removeEventListener("miora:refresh-checkin", handleExternalRefresh);
   });
 
+  function handleExternalRefresh() {
+    if (!hasUnsavedChanges && !busy) {
+      void loadSelectedDate();
+    }
+  }
+
   async function loadSelectedDate() {
+    hasUnsavedChanges = false;
     const sequence = ++loadSequence;
     loadingDate = true;
     submitState = "idle";
@@ -103,11 +113,13 @@
       next[code] = 1;
     }
     selectedSymptoms = next;
+    hasUnsavedChanges = true;
     clearFeedback();
   }
 
   function setSeverity(code: string, severity: number) {
     selectedSymptoms = { ...selectedSymptoms, [code]: severity };
+    hasUnsavedChanges = true;
     clearFeedback();
   }
 
@@ -130,6 +142,7 @@
         symptoms: entries,
       });
       hasExistingCheckin = true;
+      hasUnsavedChanges = false;
       submitState = "success";
       dateMessage = "Saved for " + formatDate(selectedDate, { year: "numeric" }) + ".";
     } catch (error) {
@@ -191,6 +204,7 @@
           disabled={loadingDate || busy}
           onclick={() => {
             moodScore = mood.score;
+            hasUnsavedChanges = true;
             clearFeedback();
           }}
         >
@@ -217,7 +231,7 @@
       max="5"
       step="1"
       bind:value={energyScore}
-      oninput={clearFeedback}
+      oninput={() => { hasUnsavedChanges = true; clearFeedback(); }}
       disabled={loadingDate || busy}
       aria-label="Energy level from 1 to 5"
     />

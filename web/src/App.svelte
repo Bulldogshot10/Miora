@@ -48,6 +48,7 @@
     try {
       snapshot = await getDashboardSnapshot();
       errorMessage = "";
+      window.dispatchEvent(new Event("miora:refresh-checkin"));
     } catch (error) {
       errorMessage = String(error);
     }
