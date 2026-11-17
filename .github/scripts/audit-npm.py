@@ -3,8 +3,8 @@
 
 picomatch's GHSA-fc5q-39xc-vjpf currently has no patched release. Miora only
 uses picomatch through Vite/fdir in the development toolchain. The dev server
-binds to loopback by default; Tauri sets TAURI_DEV_HOST only for explicit
-physical-device development sessions. No app/runtime package may inherit this
+binds to loopback only; Android devices use ADB reverse forwarding rather than
+exposing a LAN listener. No app/runtime package may inherit this
 exception. Remove this exception as soon as picomatch publishes a fix.
 """
 import json
