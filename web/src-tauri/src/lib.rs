@@ -1,6 +1,7 @@
-use std::{path::Path, sync::Mutex};
+use std::{path::Path, sync::{Mutex, OnceLock}};
 
-use chrono::{Local, NaiveDate};
+use jiff::{civil::Date as NaiveDate, ToSpan, Zoned};
+use zeroize::Zeroizing;
 use miora::domain::{
     cycle::{cycle_day, cycle_length_days},
     symptom::{Severity, SymptomCode, SymptomEntry},
@@ -16,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 uniffi::setup_scaffolding!();
+
+static DATABASE_KEY: OnceLock<Zeroizing<Vec<u8>>> = OnceLock::new();
 
 struct BackendState {
     repository: Mutex<Repository>,
@@ -115,6 +118,39 @@ impl std::fmt::Display for WidgetApiError {
 
 impl std::error::Error for WidgetApiError {}
 
+fn configured_database_key() -> Result<&'static [u8], String> {
+    DATABASE_KEY
+        .get()
+        .map(|key| key.as_slice())
+        .ok_or_else(|| "The Android database key has not been initialized.".to_string())
+}
+
+#[uniffi::export]
+pub fn configure_database_key(key: Vec<u8>) -> Result<(), WidgetApiError> {
+    if key.len() != 32 {
+        return Err(WidgetApiError::Message(
+            "The database encryption key must contain exactly 32 bytes.".to_string(),
+        ));
+    }
+
+    let key = Zeroizing::new(key);
+    match DATABASE_KEY.set(key) {
+        Ok(()) => Ok(()),
+        Err(candidate) => {
+            if DATABASE_KEY
+                .get()
+                .is_some_and(|existing| existing.as_slice() == candidate.as_slice())
+            {
+                Ok(())
+            } else {
+                Err(WidgetApiError::Message(
+                    "A different database key is already active in this process.".to_string(),
+                ))
+            }
+        }
+    }
+}
+
 fn load_daily_checkin_from_repository(
     repository: &Repository,
     date: NaiveDate,
@@ -127,7 +163,7 @@ fn load_daily_checkin_from_repository(
     };
 
     Ok(Some(DailyCheckinInput {
-        date: date.format("%Y-%m-%d").to_string(),
+        date: date.to_string(),
         mood_score: checkin.mood_score,
         energy_score: checkin.energy_score,
         symptoms: checkin
@@ -145,10 +181,10 @@ fn save_daily_checkin_to_repository(
     repository: &Repository,
     input: DailyCheckinInput,
 ) -> Result<(), String> {
-    let date = NaiveDate::parse_from_str(&input.date, "%Y-%m-%d")
+    let date = input.date.parse::<NaiveDate>()
         .map_err(|_| "Choose a valid check-in date.".to_string())?;
 
-    if date > Local::now().date_naive() {
+    if date > Zoned::now().date() {
         return Err("A check-in date cannot be in the future.".to_string());
     }
 
@@ -173,9 +209,10 @@ pub fn widget_get_daily_checkin(
     database_path: String,
     date: String,
 ) -> Result<Option<DailyCheckinInput>, WidgetApiError> {
-    let parsed_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+    let parsed_date = date.parse::<NaiveDate>()
         .map_err(|_| WidgetApiError::Message("Choose a valid check-in date.".to_string()))?;
-    let repository = Repository::open(Path::new(&database_path))
+    let key = configured_database_key().map_err(WidgetApiError::Message)?;
+    let repository = Repository::open(Path::new(&database_path), key)
         .map_err(|error| WidgetApiError::Message(error.to_string()))?;
 
     load_daily_checkin_from_repository(&repository, parsed_date).map_err(WidgetApiError::Message)
@@ -186,7 +223,8 @@ pub fn widget_save_daily_checkin(
     database_path: String,
     input: DailyCheckinInput,
 ) -> Result<(), WidgetApiError> {
-    let repository = Repository::open(Path::new(&database_path))
+    let key = configured_database_key().map_err(WidgetApiError::Message)?;
+    let repository = Repository::open(Path::new(&database_path), key)
         .map_err(|error| WidgetApiError::Message(error.to_string()))?;
 
     save_daily_checkin_to_repository(&repository, input).map_err(WidgetApiError::Message)
@@ -203,7 +241,7 @@ fn confirmed_duration_for_current_period(record: Option<PeriodBleedingRecord>) -
         return None;
     }
 
-    Some((end - record.start_date).num_days() as u32 + 1)
+    Some((end - record.start_date).get_days() as u32 + 1)
 }
 
 fn observed_bleeding_through_cycle_day(
@@ -220,7 +258,7 @@ fn observed_bleeding_through_cycle_day(
         return None;
     }
 
-    Some((observed_through - record.start_date).num_days() as u32 + 1)
+    Some((observed_through - record.start_date).get_days() as u32 + 1)
 }
 
 fn bleeding_prompt_for_today(
@@ -248,8 +286,8 @@ fn bleeding_prompt_for_today(
     }
 
     Some(BleedingPrompt {
-        period_start: record.start_date.format("%Y-%m-%d").to_string(),
-        check_date: today.format("%Y-%m-%d").to_string(),
+        period_start: record.start_date.to_string(),
+        check_date: today.to_string(),
         predicted_bleeding_duration_days: predicted_duration,
         completed_bleeding_durations_used: posterior.observations(),
     })
@@ -316,7 +354,7 @@ fn symptom_patterns_for_cycle_day(
             .iter()
             .filter_map(|(date, symptoms)| {
                 let start = starts.iter().rev().find(|start| **start <= *date)?;
-                let cycle_day = (*date - *start).num_days() as u32 + 1;
+                let cycle_day = (*date - *start).get_days() as u32 + 1;
                 Some(SymptomObservation {
                     cycle_day,
                     occurred: symptoms.contains(&code),
@@ -350,7 +388,7 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
         .period_start_dates()
         .map_err(|error| error.to_string())?;
     let latest = starts.last().copied();
-    let today = Local::now().date_naive();
+    let today = Zoned::now().date();
 
     let intervals: Vec<f64> = starts
         .windows(2)
@@ -379,27 +417,27 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
     let bleeding_prompt = bleeding_prompt_for_today(latest_record, &completed_durations, today);
 
     Ok(DashboardSnapshot {
-        last_period_start: latest.map(|date| date.format("%Y-%m-%d").to_string()),
+        last_period_start: latest.map(|date| date.to_string()),
         cycle_day: latest.and_then(|start| cycle_day(start, today)),
         expected_next_period_start: prediction
             .as_ref()
-            .map(|value| value.expected_start.format("%Y-%m-%d").to_string()),
+            .map(|value| value.expected_start.to_string()),
         earliest_next_period_start: prediction
             .as_ref()
-            .map(|value| value.earliest_start.format("%Y-%m-%d").to_string()),
+            .map(|value| value.earliest_start.to_string()),
         latest_next_period_start: prediction
             .as_ref()
-            .map(|value| value.latest_start.format("%Y-%m-%d").to_string()),
+            .map(|value| value.latest_start.to_string()),
         cycles_tracked: intervals.len(),
         average_cycle_length: mean(&intervals),
         checkins_tracked,
         period_starts: starts
             .iter()
-            .map(|date| date.format("%Y-%m-%d").to_string())
+            .map(|date| date.to_string())
             .collect(),
         checkin_dates: checkin_dates
             .iter()
-            .map(|date| date.format("%Y-%m-%d").to_string())
+            .map(|date| date.to_string())
             .collect(),
         phase,
         symptom_patterns,
@@ -422,17 +460,17 @@ fn log_period_start(
     end_date: Option<String>,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
-    let parsed_start = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+    let parsed_start = date.parse::<NaiveDate>()
         .map_err(|_| "Choose a valid period start date.".to_string())?;
 
-    let today = Local::now().date_naive();
+    let today = Zoned::now().date();
     if parsed_start > today {
         return Err("A period start date cannot be in the future.".to_string());
     }
 
     let parsed_end = end_date
         .filter(|value| !value.is_empty())
-        .map(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d"))
+        .map(|value| value.parse::<NaiveDate>())
         .transpose()
         .map_err(|_| "Choose a valid last bleeding date.".to_string())?;
 
@@ -485,20 +523,20 @@ fn report_bleeding_status(
     last_bleeding_date: Option<String>,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
-    let start = NaiveDate::parse_from_str(&period_start, "%Y-%m-%d")
+    let start = period_start.parse::<NaiveDate>()
         .map_err(|_| "The period start date is invalid.".to_string())?;
-    let observation_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+    let observation_date = date.parse::<NaiveDate>()
         .map_err(|_| "The bleeding check date is invalid.".to_string())?;
     let parsed_last_bleeding_date = last_bleeding_date
         .filter(|value| !value.is_empty())
-        .map(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d"))
+        .map(|value| value.parse::<NaiveDate>())
         .transpose()
         .map_err(|_| "Choose a valid last bleeding date.".to_string())?;
     if !still_bleeding && parsed_last_bleeding_date.is_none() {
         return Err("Select the last day you were bleeding.".to_string());
     }
 
-    let today = Local::now().date_naive();
+    let today = Zoned::now().date();
 
     if observation_date != today {
         return Err("Refresh the dashboard before answering the bleeding check.".to_string());
@@ -536,7 +574,7 @@ fn get_daily_checkin(
     date: String,
     backend: State<'_, BackendState>,
 ) -> Result<Option<DailyCheckinInput>, String> {
-    let parsed = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+    let parsed = date.parse::<NaiveDate>()
         .map_err(|_| "Choose a valid check-in date.".to_string())?;
 
     let repository = backend
@@ -568,7 +606,10 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
 
-            let repository = Repository::open(&app_data_dir.join("miora.sqlite3"))
+            let database_key = DATABASE_KEY
+                .get()
+                .ok_or_else(|| std::io::Error::other("Android Keystore database key is not initialized"))?;
+            let repository = Repository::open(&app_data_dir.join("miora.sqlite3"), database_key.as_slice())
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 
             app.manage(BackendState {
@@ -594,7 +635,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn date(year: i32, month: u32, day: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(year, month, day).unwrap()
+        NaiveDate::new(year as i16, month as i8, day as i8).unwrap()
     }
 
     #[test]
@@ -622,6 +663,7 @@ mod tests {
             ],
         };
 
+        configure_database_key(vec![0xA5; 32]).unwrap();
         widget_save_daily_checkin(database_path.clone(), input).unwrap();
         let restored = widget_get_daily_checkin(database_path, "2026-03-03".to_string())
             .unwrap()
@@ -656,7 +698,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!("miora-symptoms-{nonce}.sqlite3"));
-        let repository = Repository::open(&path).unwrap();
+        let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
 
         let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
         for start in starts {
