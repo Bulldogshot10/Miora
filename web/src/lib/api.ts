@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BleedingPrompt,
+  CyclePhaseSnapshot,
   DashboardSnapshot,
   DailyCheckinInput,
   PhaseProbabilities,
@@ -312,7 +313,7 @@ function browserSnapshot(): DashboardSnapshot {
 
   const latestState = latest ? bleedingStates[latest] : undefined;
   const latestEnd = latest ? periodEnds[latest] : undefined;
-  const confirmedCurrentDuration = latestEnd && latestState?.confirmed !== false
+  const confirmedCurrentDuration = latest && latestEnd && latestState?.confirmed !== false
     ? localDayDifference(latest, latestEnd) + 1
     : null;
 
