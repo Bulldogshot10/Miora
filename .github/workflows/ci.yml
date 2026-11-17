@@ -15,6 +15,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-lockfiles:
+    name: Resolve dependency lockfiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Generate lockfiles
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix web
+          cargo generate-lockfile
+          cargo generate-lockfile --manifest-path web/src-tauri/Cargo.toml
+
+      - name: Upload resolved lockfiles
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: miora-dependency-lockfiles
+          path: |
+            Cargo.lock
+            web/package-lock.json
+            web/src-tauri/Cargo.lock
+          if-no-files-found: error
+          retention-days: 3
+
   quality:
     name: Rust and Web quality
     runs-on: ubuntu-latest
