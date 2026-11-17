@@ -5,6 +5,8 @@
 
   export let snapshot: DashboardSnapshot;
   export let onNavigate: (tab: Tab) => void;
+  export let onBleedingStatus: (stillBleeding: boolean) => void;
+  export let busy = false;
 
   const todayLabel = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
@@ -52,7 +54,7 @@
           </div>
         {/if}
       {:else}
-        <p class="cycle-detail">Log the first day of your most recent period. Miora will build estimates from your own history.</p>
+        <p class="cycle-detail">Log the first day of the most recent period. Miora will build estimates from her own history.</p>
         <button class="button button-on-dark" type="button" onclick={() => onNavigate("calendar")}>
           <Plus size={17} /> Log period start
         </button>
@@ -69,7 +71,7 @@
         <div class="action-icon action-icon-lilac"><ClipboardCheck size={21} strokeWidth={1.8} /></div>
         <div class="action-copy">
           <p class="eyebrow">DAILY CHECK-IN</p>
-          <h2>How are you feeling today?</h2>
+          <h2>How is she feeling today?</h2>
           <p>Record mood, energy and symptoms.</p>
         </div>
         <button class="icon-action" type="button" aria-label="Open daily check-in" onclick={() => onNavigate("checkin")}>
@@ -82,7 +84,7 @@
         <div class="action-copy">
           <p class="eyebrow">PERIOD HISTORY</p>
           <h2>{snapshot.periodStarts.length} {snapshot.periodStarts.length === 1 ? "start logged" : "starts logged"}</h2>
-          <p>{snapshot.lastPeriodStart ? "View your dates and cycle history." : "Add a date to start your history."}</p>
+          <p>{snapshot.lastPeriodStart ? "View her dates and cycle history." : "Add a date to start her history."}</p>
         </div>
         <button class="icon-action" type="button" aria-label="Open calendar" onclick={() => onNavigate("calendar")}>
           <ArrowRight size={19} />
@@ -90,6 +92,85 @@
       </section>
     </div>
   </div>
+
+  {#if snapshot.phase}
+    <section class="phase-card" aria-label="Estimated current cycle phase">
+      <div class="phase-card-top">
+        <p class="eyebrow">CURRENT CYCLE PHASE</p>
+        <span class="phase-pill">{snapshot.phase.label}</span>
+      </div>
+      <h3>
+        Cycle day {snapshot.phase.cycleDay}
+        {#if snapshot.phase.estimatedCycleLength > 0}
+          · {snapshot.phase.estimatedCycleLength}-day model estimate
+        {:else}
+          · Cycle length still learning
+        {/if}
+      </h3>
+      <p>{snapshot.phase.description}</p>
+
+      <div class="phase-probabilities" aria-label="Phase probability distribution">
+        <div class="phase-probability">
+          <span>Menstrual</span>
+          <strong>{Math.round(snapshot.phase.probabilities.menstrual * 100)}%</strong>
+        </div>
+        <div class="phase-probability">
+          <span>Follicular</span>
+          <strong>{Math.round(snapshot.phase.probabilities.follicular * 100)}%</strong>
+        </div>
+        <div class="phase-probability">
+          <span>Ovulation</span>
+          <strong>{Math.round(snapshot.phase.probabilities.ovulationWindow * 100)}%</strong>
+        </div>
+        <div class="phase-probability">
+          <span>Luteal</span>
+          <strong>{Math.round(snapshot.phase.probabilities.luteal * 100)}%</strong>
+        </div>
+      </div>
+      <p class="phase-basis">
+        {snapshot.phase.isPersonalized
+          ? "Personal model · " + snapshot.phase.completedIntervalsUsed + " cycle intervals · " + snapshot.phase.completedBleedingDurationsUsed + " confirmed bleeding durations."
+          : "Initial Bayesian prior. More of her own cycle and bleeding history will personalise this estimate."}
+        Most likely phase: {Math.round(snapshot.phase.confidence * 100)}%.
+      </p>
+    </section>
+  {:else}
+    <section class="phase-card">
+      <p class="eyebrow">CYCLE PHASE</p>
+      <h3>Log a period start to begin</h3>
+      <p>Miora will build a phase distribution from her period dates and confirmed bleeding durations.</p>
+    </section>
+  {/if}
+
+  {#if snapshot.bleedingPrompt}
+    <section class="bleeding-prompt-card" aria-labelledby="bleeding-question">
+      <p class="eyebrow">BLEEDING CHECK · {snapshot.bleedingPrompt.completedBleedingDurationsUsed > 0 ? "PERSONAL ESTIMATE" : "FIRST-CYCLE BASELINE"}</p>
+      <h3 id="bleeding-question">Is she still bleeding today?</h3>
+      <p>
+        Her current model expects bleeding to last around
+        {snapshot.bleedingPrompt.predictedBleedingDurationDays} days.
+        Your answer updates her personal bleeding-duration model.
+      </p>
+      <div class="bleeding-prompt-actions">
+        <button
+          class="button button-outline"
+          type="button"
+          disabled={busy}
+          onclick={() => onBleedingStatus(true)}
+        >
+          Yes, still bleeding
+        </button>
+        <button
+          class="button button-primary"
+          type="button"
+          disabled={busy}
+          onclick={() => onBleedingStatus(false)}
+        >
+          No, it stopped
+        </button>
+      </div>
+    </section>
+  {/if}
 
   <section class="stats-row" aria-label="Cycle statistics">
     <div class="stat-item">

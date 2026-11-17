@@ -64,5 +64,28 @@ pub fn migrate(connection: &Connection) -> Result<()> {
         connection.execute_batch("PRAGMA user_version = 1; COMMIT;")?;
     }
 
+    if version < 2 {
+        connection.execute_batch(
+            "
+            BEGIN IMMEDIATE;
+
+            ALTER TABLE periods
+                ADD COLUMN last_bleeding_observation TEXT;
+
+            ALTER TABLE periods
+                ADD COLUMN bleeding_end_confirmed INTEGER NOT NULL DEFAULT 0
+                CHECK (bleeding_end_confirmed IN (0, 1));
+
+            UPDATE periods
+            SET last_bleeding_observation = end_date,
+                bleeding_end_confirmed = 1
+            WHERE end_date IS NOT NULL;
+
+            PRAGMA user_version = 2;
+            COMMIT;
+            ",
+        )?;
+    }
+
     Ok(())
 }

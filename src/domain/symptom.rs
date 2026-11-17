@@ -55,6 +55,15 @@ impl Severity {
             Self::Severe => 3,
         }
     }
+
+    pub const fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            1 => Some(Self::Mild),
+            2 => Some(Self::Moderate),
+            3 => Some(Self::Severe),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

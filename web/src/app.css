@@ -1441,3 +1441,312 @@ a:focus-visible {
     animation: none;
   }
 }
+
+
+/* Date-aware daily check-ins and phase/symptom education. */
+.checkin-date-card {
+  margin-bottom: 15px;
+}
+
+.date-record-message {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.date-record-saved {
+  color: var(--success);
+}
+
+.phase-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 17px;
+  padding: 19px 21px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.phase-card-top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phase-pill {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.phase-card h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.35px;
+}
+
+.phase-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.phase-basis {
+  color: var(--muted) !important;
+  font-size: 10px !important;
+  font-weight: 650;
+}
+
+.calendar-day {
+  position: relative;
+  padding-bottom: 5px;
+}
+
+.calendar-day-checkin::after {
+  position: absolute;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #5b9b88;
+  content: "";
+}
+
+.calendar-day-checkin.calendar-day-period::after {
+  outline: 1px solid var(--surface);
+  background: #397d69;
+}
+
+.legend-checkin {
+  background: #5b9b88;
+}
+
+.symptom-guidance-section {
+  margin: 5px 0 16px;
+}
+
+.guidance-heading {
+  margin: 0 2px 10px;
+}
+
+.symptom-guide-card {
+  margin-top: 9px;
+  padding: 0 16px;
+  border-radius: 16px;
+}
+
+.symptom-guide-card summary {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 730;
+  list-style: none;
+}
+
+.symptom-guide-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.symptom-guide-card summary::after {
+  flex: 0 0 auto;
+  color: var(--primary);
+  content: "+";
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.symptom-guide-card[open] summary::after {
+  content: "−";
+}
+
+.guide-summary-action {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.guide-summary {
+  margin: 0 0 15px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.guide-eyebrow {
+  margin-bottom: 7px;
+}
+
+.guide-actions {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 15px;
+  padding-left: 19px;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.guide-actions li::marker {
+  color: var(--primary);
+}
+
+.guide-care-note {
+  margin: 0 0 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.guide-care-note strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--foreground);
+  font-size: 11px;
+}
+
+.guide-care-note p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.guide-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 13px;
+  padding: 12px 0 15px;
+  border-top: 1px solid var(--border);
+}
+
+.guide-sources .eyebrow {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.guide-sources a {
+  color: var(--primary-strong);
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .phase-card {
+    padding: 16px 17px;
+    border-radius: 17px;
+  }
+
+  .symptom-guide-card {
+    padding-inline: 14px;
+  }
+}
+
+
+.phase-probabilities {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.phase-probability {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.phase-probability span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.phase-probability strong {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.bleeding-prompt-card {
+  margin-top: 14px;
+  padding: 19px 21px;
+  border: 1px solid color-mix(in srgb, var(--rose) 38%, var(--border));
+  border-radius: 20px;
+  background: var(--rose-soft);
+}
+
+.bleeding-prompt-card h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: -0.4px;
+}
+
+.bleeding-prompt-card > p:not(.eyebrow) {
+  margin: 7px 0 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.bleeding-prompt-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.button-outline {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.button-outline:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+@media (max-width: 430px) {
+  .phase-probabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bleeding-prompt-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

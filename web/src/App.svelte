@@ -11,7 +11,9 @@
 
   import {
     getDashboardSnapshot,
+    getDailyCheckin,
     logPeriodStart,
+    reportBleedingStatus,
     saveDailyCheckin,
   } from "$lib/api";
   import { EMPTY_SNAPSHOT, type DashboardSnapshot, type DailyCheckinInput, type Tab } from "$lib/types";
@@ -44,7 +46,7 @@
     statusMessage = "";
   }
 
-  async function handlePeriodSave(date: string) {
+  async function handlePeriodSave(date: string, endDate: string | null) {
     if (!date) {
       statusMessage = "Choose the first day of bleeding.";
       return;
@@ -55,7 +57,7 @@
     errorMessage = "";
     try {
       const alreadyLogged = snapshot.periodStarts.includes(date);
-      snapshot = await logPeriodStart(date);
+      snapshot = await logPeriodStart(date, endDate);
       statusMessage = alreadyLogged ? "That date is already in your history." : "Period start saved.";
       activeTab = "home";
     } catch (error) {
@@ -70,8 +72,33 @@
     try {
       snapshot = await saveDailyCheckin(input);
       statusMessage = "";
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function handleCheckinLoad(date: string): Promise<DailyCheckinInput | null> {
+    return getDailyCheckin(date);
+  }
+
+  async function handleBleedingStatus(stillBleeding: boolean): Promise<void> {
+    const prompt = snapshot.bleedingPrompt;
+    if (!prompt || busy) return;
+
+    busy = true;
+    statusMessage = "";
+    try {
+      snapshot = await reportBleedingStatus(
+        prompt.periodStart,
+        prompt.checkDate,
+        stillBleeding,
+      );
+      statusMessage = stillBleeding
+        ? "Bleeding noted for today. Miora will check again tomorrow."
+        : "Bleeding end confirmed. Her personal model has been updated.";
     } catch (error) {
-      throw error;
+      statusMessage = "Couldn't update bleeding status: " +
+        (error instanceof Error ? error.message : String(error));
     } finally {
       busy = false;
     }
@@ -115,11 +142,16 @@
       </section>
     {:else}
       {#if activeTab === "home"}
-        <HomeScreen {snapshot} onNavigate={navigate} />
+        <HomeScreen
+          {snapshot}
+          onNavigate={navigate}
+          onBleedingStatus={handleBleedingStatus}
+          {busy}
+        />
       {:else if activeTab === "calendar"}
         <CalendarScreen {snapshot} onSave={handlePeriodSave} {busy} />
       {:else if activeTab === "checkin"}
-        <CheckinScreen onSave={handleCheckinSave} {busy} />
+        <CheckinScreen onSave={handleCheckinSave} onLoad={handleCheckinLoad} {busy} />
       {:else}
         <InsightsScreen {snapshot} />
       {/if}
