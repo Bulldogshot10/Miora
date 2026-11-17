@@ -10,6 +10,7 @@ const generatedAndroidDir = resolve(webDir, "src-tauri/gen/android/app/src/main"
 const manifestPath = resolve(generatedAndroidDir, "AndroidManifest.xml");
 const config = JSON.parse(await readFile(configPath, "utf8"));
 const packageName = config.identifier;
+const releaseBuild = process.argv.includes("--release");
 
 if (!packageName || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(packageName)) {
   throw new Error("tauri.conf.json must contain a valid Android package identifier.");
@@ -31,6 +32,7 @@ for (const [attribute, value] of [
   ["android:allowBackup", "false"],
   ["android:fullBackupContent", "@xml/miora_backup_rules"],
   ["android:dataExtractionRules", "@xml/miora_data_extraction_rules"],
+  ["android:networkSecurityConfig", "@xml/miora_network_security_config"],
 ]) {
   const attributeStart = applicationTag.indexOf(attribute + '="');
   if (attributeStart >= 0) {
@@ -43,6 +45,23 @@ for (const [attribute, value] of [
   }
 }
 manifest = manifest.slice(0, applicationStart) + applicationTag + manifest.slice(applicationTagEnd + 1);
+
+// A release build has no Android INTERNET permission at all. The tools marker
+// removes it from the merged manifest, including transitive library manifests.
+if (releaseBuild) {
+  if (!manifest.includes('android:name="android.permission.INTERNET" tools:node="remove"')) {
+    if (!manifest.includes('xmlns:tools=')) {
+      manifest = manifest.replace(
+        "<manifest",
+        '<manifest xmlns:tools="http://schemas.android.com/tools"',
+      );
+    }
+    manifest = manifest.replace(
+      "</manifest>",
+      '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\\n</manifest>',
+    );
+  }
+}
 
 const receiverDeclarations = [];
 if (!manifest.includes('android:name="' + receiverName + '"')) {
@@ -140,6 +159,10 @@ await copyFile(
   resolve(sourceDir, "miora_data_extraction_rules.xml"),
   resolve(xmlDir, "miora_data_extraction_rules.xml"),
 );
+await copyFile(
+  resolve(sourceDir, "miora_network_security_config.xml"),
+  resolve(xmlDir, "miora_network_security_config.xml"),
+);
 await copyFile(resolve(sourceDir, "miora_widget_panel.xml"), resolve(drawableDir, "miora_widget_panel.xml"));
 await copyFile(resolve(sourceDir, "miora_widget_chip.xml"), resolve(drawableDir, "miora_widget_chip.xml"));
 await copyFile(
@@ -233,6 +256,10 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 }
 
 let gradle = await readFile(gradlePath, "utf8");
+gradle = gradle.replace(
+  /manifestPlaceholders\\["usesCleartextTraffic"\\] = true/g,
+  'manifestPlaceholders["usesCleartextTraffic"] = false',
+);
 if (!gradle.includes("net.java.dev.jna:jna:")) {
   const dependencyBlock = gradle.match(/dependencies\s*\{/);
   if (!dependencyBlock) {
