@@ -1,0 +1,366 @@
+import { CalendarScreen, CalendarDay, CalendarWeek } from "calendar.slint";
+import { CheckinScreen } from "checkin.slint";
+import { InsightsScreen } from "insights.slint";
+
+export component MainWindow inherits Window {
+    title: "Miora";
+    width: 390px;
+    height: 844px;
+    min-width: 320px;
+    min-height: 640px;
+    background: #FAF7F8;
+
+    in-out property <int> active-tab: 0;
+    in-out property <bool> has-period-data: false;
+    in-out property <string> cycle-day-label: "Not started";
+    in-out property <string> last-period-label: "No period dates logged yet.";
+    in-out property <string> next-period-label: "Personal estimates appear after 3 period starts.";
+    in-out property <string> calendar-month-label: "";
+    in-out property <[CalendarWeek]> calendar-weeks: [];
+    in-out property <string> history-summary: "No period history yet.";
+    in-out property <int> cycles-tracked: 0;
+    in-out property <string> average-cycle-label: "Not enough data";
+    in-out property <int> checkins-tracked: 0;
+    in-out property <string> status-message: "";
+
+    callback save-period-start(string);
+    callback save-checkin(int, int, bool, bool, bool, bool, bool);
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            background: #FAF7F8;
+            vertical-stretch: 1;
+            clip: true;
+
+            if root.active-tab == 0 : DashboardScreen {
+                width: parent.width;
+                height: parent.height;
+                has-period-data: root.has-period-data;
+                cycle-day-label: root.cycle-day-label;
+                last-period-label: root.last-period-label;
+                next-period-label: root.next-period-label;
+                log-period-clicked => { root.active-tab = 1; }
+                check-in-clicked => { root.active-tab = 2; }
+            }
+
+            if root.active-tab == 1 : CalendarScreen {
+                width: parent.width;
+                height: parent.height;
+                month-label: root.calendar-month-label;
+                calendar-weeks: root.calendar-weeks;
+                history-summary: root.history-summary;
+                status-message: root.status-message;
+                save-period-start(date) => { root.save-period-start(date); }
+            }
+
+            if root.active-tab == 2 : CheckinScreen {
+                width: parent.width;
+                height: parent.height;
+                status-message: root.status-message;
+                save-checkin(mood, energy, cramps, bloating, headache, fatigue, mood-changes) => {
+                    root.save-checkin(mood, energy, cramps, bloating, headache, fatigue, mood-changes);
+                }
+            }
+
+            if root.active-tab == 3 : InsightsScreen {
+                width: parent.width;
+                height: parent.height;
+                cycles-tracked: root.cycles-tracked;
+                average-cycle-label: root.average-cycle-label;
+                checkins-tracked: root.checkins-tracked;
+                history-summary: root.history-summary;
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            height: 72px;
+            width: parent.width;
+
+            HorizontalLayout {
+                spacing: 0px;
+
+                NavItem {
+                    label: "Home";
+                    active: root.active-tab == 0;
+                    selected => { root.active-tab = 0; }
+                }
+                NavItem {
+                    label: "Calendar";
+                    active: root.active-tab == 1;
+                    selected => { root.active-tab = 1; }
+                }
+                NavItem {
+                    label: "Check-in";
+                    active: root.active-tab == 2;
+                    selected => { root.active-tab = 2; }
+                }
+                NavItem {
+                    label: "Insights";
+                    active: root.active-tab == 3;
+                    selected => { root.active-tab = 3; }
+                }
+            }
+        }
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback selected();
+
+    horizontal-stretch: 1;
+    height: 72px;
+    background: active ? #F7EDF1 : #FFFFFF;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 5px;
+
+        Rectangle {
+            background: active ? #A64D70 : transparent;
+            border-radius: 2px;
+            width: 26px;
+            height: 3px;
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? #813A59 : #665B67;
+            font-size: 12px;
+            font-weight: root.active ? 700 : 500;
+            horizontal-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.selected(); }
+    }
+}
+
+export component DashboardScreen inherits Rectangle {
+    in property <bool> has-period-data;
+    in property <string> cycle-day-label;
+    in property <string> last-period-label;
+    in property <string> next-period-label;
+
+    callback log-period-clicked();
+    callback check-in-clicked();
+
+    background: #FAF7F8;
+
+    VerticalLayout {
+        padding-left: 22px;
+        padding-right: 22px;
+        padding-top: 24px;
+        padding-bottom: 16px;
+        spacing: 15px;
+
+        VerticalLayout {
+            spacing: 2px;
+
+            Text {
+                text: "miora";
+                color: #342633;
+                font-size: 31px;
+                font-weight: 800;
+            }
+
+            Text {
+                text: "Understand your rhythm.";
+                color: #756876;
+                font-size: 14px;
+            }
+        }
+
+        Text {
+            text: "Your cycle at a glance";
+            color: #342633;
+            font-size: 21px;
+            font-weight: 700;
+        }
+
+        Rectangle {
+            background: #F2E8EE;
+            border-radius: 22px;
+            height: 192px;
+            width: parent.width;
+
+            VerticalLayout {
+                padding: 19px;
+                spacing: 9px;
+
+                Text {
+                    text: "CURRENT CYCLE";
+                    color: #72586C;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                }
+
+                Text {
+                    text: root.has-period-data ? root.cycle-day-label : "Let's start with your cycle";
+                    color: #342633;
+                    font-size: root.has-period-data ? 27px : 22px;
+                    font-weight: 750;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: root.has-period-data ? root.last-period-label : "Log the first day of her latest period. Miora will learn from her own history.";
+                    color: #665B67;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+
+                Rectangle {
+                    background: #DCCBD5;
+                    width: parent.width;
+                    height: 1px;
+                }
+
+                Text {
+                    text: root.has-period-data ? root.next-period-label : "Personal estimates appear after more period starts are logged.";
+                    color: #594958;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            border-radius: 18px;
+            height: 112px;
+            width: parent.width;
+
+            HorizontalLayout {
+                padding: 15px;
+                spacing: 10px;
+
+                VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: center;
+                    spacing: 5px;
+
+                    Text {
+                        text: "DAILY CHECK-IN";
+                        color: #72586C;
+                        font-size: 10px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                    }
+
+                    Text {
+                        text: "How are you feeling today?";
+                        color: #342633;
+                        font-size: 15px;
+                        font-weight: 650;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: "Mood, energy and symptoms";
+                        color: #756876;
+                        font-size: 12px;
+                    }
+                }
+
+                Rectangle {
+                    background: #A64D70;
+                    border-radius: 13px;
+                    width: 96px;
+                    height: 48px;
+
+                    Text {
+                        text: "Check in";
+                        color: #FFFFFF;
+                        font-size: 13px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => { root.check-in-clicked(); }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            border-radius: 18px;
+            height: 94px;
+            width: parent.width;
+
+            HorizontalLayout {
+                padding: 15px;
+                spacing: 10px;
+
+                VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: center;
+                    spacing: 4px;
+
+                    Text {
+                        text: "PERIOD HISTORY";
+                        color: #72586C;
+                        font-size: 10px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                    }
+
+                    Text {
+                        text: root.has-period-data ? root.last-period-label : "No period dates logged yet";
+                        color: #342633;
+                        font-size: 13px;
+                        font-weight: 600;
+                        wrap: word-wrap;
+                    }
+                }
+
+                Rectangle {
+                    background: #F7EDF1;
+                    border-radius: 12px;
+                    width: 104px;
+                    height: 46px;
+
+                    Text {
+                        text: "Log period";
+                        color: #813A59;
+                        font-size: 13px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => { root.log-period-clicked(); }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: transparent;
+            vertical-stretch: 1;
+        }
+
+        Text {
+            text: "Your data stays on this device.";
+            color: #756876;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+    }
+}

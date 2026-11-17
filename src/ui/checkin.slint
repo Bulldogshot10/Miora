@@ -1,0 +1,294 @@
+component ChoiceChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback picked();
+
+    horizontal-stretch: 1;
+    height: 46px;
+    border-radius: 11px;
+    background: root.active ? #F3E3EA : #FFFFFF;
+    border-width: 1px;
+    border-color: root.active ? #A64D70 : #E7DFE5;
+
+    Text {
+        text: root.label;
+        color: root.active ? #813A59 : #514452;
+        font-size: 11px;
+        font-weight: root.active ? 700 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => { root.picked(); }
+    }
+}
+
+component ToggleChip inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> active: false;
+
+    horizontal-stretch: 1;
+    height: 46px;
+    border-radius: 12px;
+    background: root.active ? #F3E3EA : #FFFFFF;
+    border-width: 1px;
+    border-color: root.active ? #A64D70 : #E7DFE5;
+
+    Text {
+        text: root.label;
+        color: root.active ? #813A59 : #514452;
+        font-size: 12px;
+        font-weight: root.active ? 700 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => { root.active = !root.active; }
+    }
+}
+
+export component CheckinScreen inherits Rectangle {
+    in property <string> status-message;
+
+    callback save-checkin(int, int, bool, bool, bool, bool, bool);
+
+    in-out property <int> mood-score: 2;
+    in-out property <int> energy-score: 3;
+    in-out property <bool> cramps-selected: false;
+    in-out property <bool> bloating-selected: false;
+    in-out property <bool> headache-selected: false;
+    in-out property <bool> fatigue-selected: false;
+    in-out property <bool> mood-changes-selected: false;
+
+    background: #FAF7F8;
+
+    VerticalLayout {
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-top: 20px;
+        padding-bottom: 14px;
+        spacing: 13px;
+
+        VerticalLayout {
+            spacing: 3px;
+
+            Text {
+                text: "Daily check-in";
+                color: #342633;
+                font-size: 25px;
+                font-weight: 750;
+            }
+
+            Text {
+                text: "A quick snapshot of how today feels.";
+                color: #665B67;
+                font-size: 13px;
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            border-radius: 17px;
+            height: 126px;
+            width: parent.width;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+
+                Text {
+                    text: "HOW IS YOUR MOOD?";
+                    color: #72586C;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+
+                    ChoiceChip {
+                        label: "Good";
+                        active: root.mood-score == 1;
+                        picked => { root.mood-score = 1; }
+                    }
+                    ChoiceChip {
+                        label: "Okay";
+                        active: root.mood-score == 2;
+                        picked => { root.mood-score = 2; }
+                    }
+                    ChoiceChip {
+                        label: "Low";
+                        active: root.mood-score == 3;
+                        picked => { root.mood-score = 3; }
+                    }
+                    ChoiceChip {
+                        label: "Anxious";
+                        active: root.mood-score == 4;
+                        picked => { root.mood-score = 4; }
+                    }
+                    ChoiceChip {
+                        label: "Irritable";
+                        active: root.mood-score == 5;
+                        picked => { root.mood-score = 5; }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            border-radius: 17px;
+            height: 112px;
+            width: parent.width;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+
+                Text {
+                    text: "ENERGY LEVEL";
+                    color: #72586C;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+
+                    ChoiceChip {
+                        label: "1";
+                        active: root.energy-score == 1;
+                        picked => { root.energy-score = 1; }
+                    }
+                    ChoiceChip {
+                        label: "2";
+                        active: root.energy-score == 2;
+                        picked => { root.energy-score = 2; }
+                    }
+                    ChoiceChip {
+                        label: "3";
+                        active: root.energy-score == 3;
+                        picked => { root.energy-score = 3; }
+                    }
+                    ChoiceChip {
+                        label: "4";
+                        active: root.energy-score == 4;
+                        picked => { root.energy-score = 4; }
+                    }
+                    ChoiceChip {
+                        label: "5";
+                        active: root.energy-score == 5;
+                        picked => { root.energy-score = 5; }
+                    }
+                }
+
+                Text {
+                    text: "1 = very low    5 = very high";
+                    color: #756876;
+                    font-size: 10px;
+                }
+            }
+        }
+
+        Rectangle {
+            background: #FFFFFF;
+            border-color: #E8E0E5;
+            border-width: 1px;
+            border-radius: 17px;
+            height: 177px;
+            width: parent.width;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+
+                Text {
+                    text: "SYMPTOMS";
+                    color: #72586C;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    ToggleChip {
+                        label: "Cramps";
+                        active <=> root.cramps-selected;
+                    }
+                    ToggleChip {
+                        label: "Bloating";
+                        active <=> root.bloating-selected;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    ToggleChip {
+                        label: "Headache";
+                        active <=> root.headache-selected;
+                    }
+                    ToggleChip {
+                        label: "Fatigue";
+                        active <=> root.fatigue-selected;
+                    }
+                }
+
+                ToggleChip {
+                    label: "Mood changes";
+                    active <=> root.mood-changes-selected;
+                }
+            }
+        }
+
+        Rectangle {
+            background: #A64D70;
+            border-radius: 12px;
+            width: parent.width;
+            height: 50px;
+
+            Text {
+                text: "Save today's check-in";
+                color: #FFFFFF;
+                font-size: 14px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.save-checkin(
+                        root.mood-score,
+                        root.energy-score,
+                        root.cramps-selected,
+                        root.bloating-selected,
+                        root.headache-selected,
+                        root.fatigue-selected,
+                        root.mood-changes-selected
+                    );
+                }
+            }
+        }
+
+        Text {
+            text: root.status-message;
+            color: #813A59;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+
+        Rectangle {
+            background: transparent;
+            vertical-stretch: 1;
+        }
+    }
+}

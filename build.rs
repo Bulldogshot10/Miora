@@ -1,3 +1,4 @@
 fn main() {
-    slint_build::compile("ui/main.slint").expect("failed to compile Miora UI");
+    slint_build::compile("src/ui/dashboard.slint")
+        .expect("failed to compile Miora UI");
 }
