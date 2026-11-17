@@ -39,7 +39,6 @@ export component CalendarScreen inherits Rectangle {
     in property <string> status-message;
 
     callback save-period-start(string);
-    in-out property <string> date-input <=> period-date-input.text;
 
     background: #FAF7F8;
 
@@ -179,7 +178,7 @@ export component CalendarScreen inherits Rectangle {
                         font-size: 14px;
                         x: 13px;
                         vertical-alignment: center;
-                        visible: root.date-input == "";
+                        visible: period-date-input.text == "";
                     }
 
                     period-date-input := TextInput {
@@ -214,7 +213,7 @@ export component CalendarScreen inherits Rectangle {
                     }
 
                     TouchArea {
-                        clicked => { root.save-period-start(root.date-input); }
+                        clicked => { root.save-period-start(period-date-input.text); }
                     }
                 }
 

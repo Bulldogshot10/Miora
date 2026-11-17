@@ -36,7 +36,7 @@ component NavItem inherits Rectangle {
     }
 }
 
-export component DashboardScreen inherits Rectangle {
+component DashboardScreen inherits Rectangle {
     in property <bool> has-period-data;
     in property <string> cycle-day-label;
     in property <string> last-period-label;
@@ -259,8 +259,8 @@ export component DashboardScreen inherits Rectangle {
 }
 export component MainWindow inherits Window {
     title: "Miora";
-    width: 390px;
-    height: 844px;
+    preferred-width: 390px;
+    preferred-height: 844px;
     min-width: 320px;
     min-height: 640px;
     background: #FAF7F8;
