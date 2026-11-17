@@ -97,7 +97,7 @@ jobs:
           from pathlib import Path
 
           tag = os.environ["RELEASE_TAG"]
-          if not re.fullmatch(r"v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?", tag):
+          if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
               raise SystemExit(f"Invalid Android release tag: {tag!r}; expected vMAJOR.MINOR.PATCH[-prerelease].")
 
           version_code = int(os.environ["RELEASE_VERSION_CODE"])
@@ -108,7 +108,7 @@ jobs:
           config = json.loads(config_path.read_text())
           config["version"] = tag[1:]
           config.setdefault("bundle", {}).setdefault("android", {})["versionCode"] = version_code
-          config_path.write_text(json.dumps(config, indent=2) + "\\n")
+          config_path.write_text(json.dumps(config, indent=2) + "\n")
           print(f"Android release version: {config['version']} (versionCode {version_code})")
           PY
 
