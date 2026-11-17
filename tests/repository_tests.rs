@@ -168,6 +168,57 @@ fn daily_checkin_query_includes_days_without_symptoms() {
 }
 
 #[test]
+
+#[test]
+fn database_is_encrypted_and_rejects_an_incorrect_key() {
+    use std::io::Read;
+
+    let path = temporary_database_path();
+    let key = [0xA5; 32];
+    let wrong_key = [0x5A; 32];
+
+    {
+        let repository = Repository::open(&path, &key).unwrap();
+        repository.add_period_start(date(2026, 11, 1)).unwrap();
+    }
+
+    let mut header = [0_u8; 16];
+    std::fs::File::open(&path)
+        .unwrap()
+        .read_exact(&mut header)
+        .unwrap();
+    assert_ne!(&header, b"SQLite format 3\\0");
+
+    let raw_connection = Connection::open(&path).unwrap();
+    assert!(
+        raw_connection
+            .query_row("SELECT COUNT(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
+            .is_err(),
+        "the database must not be readable without its SQLCipher key"
+    );
+    drop(raw_connection);
+
+    assert!(
+        Repository::open(&path, &wrong_key).is_err(),
+        "an incorrect key must not open the encrypted database"
+    );
+
+    let repository = Repository::open(&path, &key).unwrap();
+    assert_eq!(
+        repository.period_start_dates().unwrap(),
+        vec![date(2026, 11, 1)]
+    );
+    drop(repository);
+
+    let _ = std::fs::remove_file(&path);
+    let mut wal = path.as_os_str().to_os_string();
+    wal.push("-wal");
+    let _ = std::fs::remove_file(std::path::PathBuf::from(wal));
+    let mut shm = path.as_os_str().to_os_string();
+    shm.push("-shm");
+    let _ = std::fs::remove_file(std::path::PathBuf::from(shm));
+}
+
 fn migration_imports_legacy_period_starts() {
     let path = temporary_database_path();
     {
@@ -191,5 +242,12 @@ fn migration_imports_legacy_period_starts() {
     );
 
     drop(repository);
+    let mut header = [0_u8; 16];
+    std::fs::File::open(&path)
+        .unwrap()
+        .read_exact(&mut header)
+        .unwrap();
+    assert_ne!(&header, b"SQLite format 3\\0");
+
     let _ = std::fs::remove_file(path);
 }
