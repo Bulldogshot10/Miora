@@ -34,11 +34,11 @@ pub fn estimate_next_period(starts: &[NaiveDate]) -> Option<CyclePrediction> {
     let expected_days = center.round().max(1.0) as u64;
     let latest_start = *ordered.last()?;
 
-    let expected_start = latest_start.checked_add((expected_days as i64).days())?;
+    let expected_start = latest_start.checked_add((expected_days as i64).days()).ok()?;
     let earliest_start =
-        latest_start.checked_add((expected_days.saturating_sub(radius) as i64).days())?;
+        latest_start.checked_add((expected_days.saturating_sub(radius) as i64).days()).ok()?;
     let latest_window_start =
-        latest_start.checked_add((expected_days.saturating_add(radius) as i64).days())?;
+        latest_start.checked_add((expected_days.saturating_add(radius) as i64).days()).ok()?;
 
     let confidence = match lengths.len() {
         0..=2 => PredictionConfidence::Early,
