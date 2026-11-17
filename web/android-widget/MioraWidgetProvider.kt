@@ -14,6 +14,7 @@ import com.bulldogshot10.miora.uniffi.DailyCheckinInput
 import com.bulldogshot10.miora.uniffi.SymptomInput
 import com.bulldogshot10.miora.uniffi.widgetGetDailyCheckin
 import com.bulldogshot10.miora.uniffi.widgetSaveDailyCheckin
+import com.bulldogshot10.miora.uniffi.configureDatabaseKey as configureRustDatabaseKey
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -181,7 +182,17 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         manager.updateAppWidget(widgetId, views)
     }
 
+    private fun initializeDatabaseKey(context: Context) {
+        val databaseKey = MioraDatabaseKeyStore.getOrCreateDatabaseKey(context)
+        try {
+            configureRustDatabaseKey(databaseKey)
+        } finally {
+            databaseKey.fill(0)
+        }
+    }
+
     private fun saveCheckin(context: Context, state: WidgetState) {
+        initializeDatabaseKey(context)
         val database = databaseFile(context)
         check(database.isFile) { "Miora database is not initialized." }
 
@@ -204,6 +215,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         if (!database.isFile) return WidgetData(false, null)
 
         return try {
+            initializeDatabaseKey(context)
             val checkin = widgetGetDailyCheckin(database.absolutePath, todayIso())
             val state = checkin?.let {
                 WidgetState(
