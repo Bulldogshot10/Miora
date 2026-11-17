@@ -120,7 +120,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         val views = RemoteViews(context.packageName, R.layout.miora_daily_checkin_widget)
         val data = readWidgetData(context)
         val prefs = preferences(context, widgetId)
-        val state = visibleState(context, widgetId, data.checkin)
+        val state = visibleState(context, widgetId, data.checkin, data.ready)
         val hasDraft = prefs.getBoolean(key("draft", widgetId), false)
 
         views.setTextViewText(R.id.widget_date, displayToday())
@@ -224,6 +224,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         context: Context,
         widgetId: Int,
         saved: WidgetState?,
+        databaseReady: Boolean,
     ): WidgetState {
         val prefs = preferences(context, widgetId)
         if (!prefs.getBoolean(key("draft", widgetId), false)) {
@@ -236,9 +237,10 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             return saved ?: WidgetState(3, 3, emptyMap())
         }
 
-        // If Miora itself saved a newer value, discard the stale widget draft.
+        // Compare with the app's current record only when SQLite was readable.
+        // A transient open/lock error must never erase an unsaved widget draft.
         val baseState = prefs.getString(key("draft_base", widgetId), "none")
-        if (baseState != encodeState(saved)) {
+        if (databaseReady && baseState != encodeState(saved)) {
             clearDraft(context, widgetId)
             return saved ?: WidgetState(3, 3, emptyMap())
         }
