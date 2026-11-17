@@ -1189,7 +1189,7 @@ a:focus-visible {
     display: grid;
     width: auto;
     max-width: 520px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
     margin-inline: auto;
     padding: 6px;
