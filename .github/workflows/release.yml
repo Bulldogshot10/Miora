@@ -60,8 +60,14 @@ jobs:
         with:
           targets: aarch64-linux-android
 
+      - name: Generate dependency lockfiles
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix web
+          cargo generate-lockfile
+          cargo generate-lockfile --manifest-path web/src-tauri/Cargo.toml
+
       - name: Install Web dependencies
-        run: npm install --prefix web --no-audit --no-fund
+        run: npm ci --prefix web --no-audit --no-fund
 
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web
@@ -144,3 +150,6 @@ jobs:
           files: |
             web/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
             web/src-tauri/gen/android/app/build/outputs/apk/SHA256SUMS.txt
+            Cargo.lock
+            web/package-lock.json
+            web/src-tauri/Cargo.lock

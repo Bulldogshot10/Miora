@@ -49,10 +49,17 @@ jobs:
 
   quality:
     name: Rust and Web quality
+    needs: dependency-lockfiles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download resolved dependency lockfiles
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: miora-dependency-lockfiles
+          path: .
+
 
       - name: Install Tauri Linux dependencies
         run: |
@@ -90,7 +97,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Install Web dependencies
-        run: npm install --prefix web --no-audit --no-fund
+        run: npm ci --prefix web --no-audit --no-fund
 
       - name: Generate Tauri application icons
         run: npm run tauri:icons --prefix web
@@ -109,10 +116,17 @@ jobs:
 
   android:
     name: Build Android APK
+    needs: dependency-lockfiles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download resolved dependency lockfiles
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: miora-dependency-lockfiles
+          path: .
+
 
       - name: Install Linux dependencies for host-side UniFFI bindgen
         run: |
@@ -159,7 +173,7 @@ jobs:
           targets: aarch64-linux-android
 
       - name: Install Web dependencies
-        run: npm install --prefix web --no-audit --no-fund
+        run: npm ci --prefix web --no-audit --no-fund
 
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web
