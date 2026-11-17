@@ -169,8 +169,6 @@ fn daily_checkin_query_includes_days_without_symptoms() {
 }
 
 #[test]
-
-#[test]
 fn database_is_encrypted_and_rejects_an_incorrect_key() {
     use std::io::Read;
 
@@ -193,7 +191,8 @@ fn database_is_encrypted_and_rejects_an_incorrect_key() {
     let raw_connection = Connection::open(&path).unwrap();
     assert!(
         raw_connection
-            .query_row("SELECT COUNT(*) FROM sqlite_master", [], |row| row.get::<_, i64>(0))
+            .query_row("SELECT COUNT(*) FROM sqlite_master", [], |row| row
+                .get::<_, i64>(0))
             .is_err(),
         "the database must not be readable without its SQLCipher key"
     );
