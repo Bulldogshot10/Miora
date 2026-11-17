@@ -1,6 +1,6 @@
 use std::{path::Path, sync::{Mutex, OnceLock}};
 
-use jiff::{civil::Date as NaiveDate, ToSpan, Zoned};
+use jiff::{civil::Date as NaiveDate, Zoned};
 use zeroize::Zeroizing;
 use miora::domain::{
     cycle::{cycle_day, cycle_length_days},
