@@ -10,5 +10,6 @@ name = "miora"
 path = "src/lib.rs"
 
 [dependencies]
-chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
-rusqlite = { version = "0.43.0", features = ["bundled"] }
+jiff = "0.2.46"
+rusqlite = { version = "0.43.0", features = ["bundled-sqlcipher-vendored-openssl"] }
+zeroize = "1.8"
