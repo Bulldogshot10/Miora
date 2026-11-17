@@ -17,3 +17,12 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 miora = { package = "miora-core", path = "../.." }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
+uniffi = "=0.32.2"
+
+[features]
+uniffi-cli = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["uniffi-cli"]

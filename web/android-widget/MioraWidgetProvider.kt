@@ -4,14 +4,16 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.net.Uri
 import android.widget.RemoteViews
 import java.io.File
+import com.bulldogshot10.miora.uniffi.DailyCheckinInput
+import com.bulldogshot10.miora.uniffi.SymptomInput
+import com.bulldogshot10.miora.uniffi.widgetGetDailyCheckin
+import com.bulldogshot10.miora.uniffi.widgetSaveDailyCheckin
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,6 +55,10 @@ class MioraWidgetProvider : AppWidgetProvider() {
     }
 
     private fun handleAction(context: Context, widgetId: Int, intent: Intent) {
+        val installedIds = AppWidgetManager.getInstance(context)
+            .getAppWidgetIds(ComponentName(context, MioraWidgetProvider::class.java))
+        if (widgetId !in installedIds) return
+
         val data = readWidgetData(context)
         if (!data.ready) {
             preferences(context, widgetId).edit()
@@ -171,109 +177,39 @@ class MioraWidgetProvider : AppWidgetProvider() {
     }
 
     private fun saveCheckin(context: Context, state: WidgetState) {
-        val databaseFile = databaseFile(context)
-        check(databaseFile.isFile) { "Miora database is not initialized." }
+        val database = databaseFile(context)
+        check(database.isFile) { "Miora database is not initialized." }
 
-        val database = SQLiteDatabase.openDatabase(
-            databaseFile.absolutePath,
-            null,
-            SQLiteDatabase.OPEN_READWRITE,
-        )
-        database.setForeignKeyConstraintsEnabled(true)
-
-        try {
-            val today = todayIso()
-            database.beginTransaction()
-            try {
-                val values = ContentValues().apply {
-                    put("mood_score", state.mood)
-                    put("energy_score", state.energy)
-                }
-
-                val updated = database.update(
-                    "daily_checkins",
-                    values,
-                    "checkin_date = ?",
-                    arrayOf(today),
-                )
-
-                val checkinId = if (updated == 0) {
-                    ContentValues().apply {
-                        put("checkin_date", today)
-                        put("mood_score", state.mood)
-                        put("energy_score", state.energy)
-                    }.let { database.insertOrThrow("daily_checkins", null, it) }
-                } else {
-                    database.rawQuery(
-                        "SELECT id FROM daily_checkins WHERE checkin_date = ?",
-                        arrayOf(today),
-                    ).use { cursor ->
-                        check(cursor.moveToFirst()) { "Today's check-in could not be loaded." }
-                        cursor.getLong(0)
-                    }
-                }
-
-                database.delete("symptoms", "checkin_id = ?", arrayOf(checkinId.toString()))
-                state.symptoms.forEach { (code, severity) ->
-                    val symptom = ContentValues().apply {
-                        put("checkin_id", checkinId)
-                        put("symptom_code", code)
-                        put("severity", severity)
-                    }
-                    database.insertOrThrow("symptoms", null, symptom)
-                }
-
-                database.setTransactionSuccessful()
-            } finally {
-                database.endTransaction()
-            }
-        } finally {
-            database.close()
+        val symptoms = state.symptoms.map { (code, severity) ->
+            SymptomInput(code, severity)
         }
+        widgetSaveDailyCheckin(
+            database.absolutePath,
+            DailyCheckinInput(
+                todayIso(),
+                state.mood,
+                state.energy,
+                symptoms,
+            ),
+        )
     }
 
     private fun readWidgetData(context: Context): WidgetData {
-        val file = databaseFile(context)
-        if (!file.isFile) return WidgetData(false, null)
+        val database = databaseFile(context)
+        if (!database.isFile) return WidgetData(false, null)
 
         return try {
-            val database = SQLiteDatabase.openDatabase(
-                file.absolutePath,
-                null,
-                SQLiteDatabase.OPEN_READWRITE,
-            )
-            try {
-                val checkin = database.rawQuery(
-                    "SELECT id, mood_score, energy_score FROM daily_checkins WHERE checkin_date = ?",
-                    arrayOf(todayIso()),
-                ).use { cursor ->
-                    if (!cursor.moveToFirst()) {
-                        null
-                    } else {
-                        val id = cursor.getLong(0)
-                        val symptoms = mutableMapOf<String, Int>()
-                        database.rawQuery(
-                            "SELECT symptom_code, severity FROM symptoms WHERE checkin_id = ?",
-                            arrayOf(id.toString()),
-                        ).use { symptomCursor ->
-                            while (symptomCursor.moveToNext()) {
-                                val code = symptomCursor.getString(0)
-                                if (code in SYMPTOM_CODES) {
-                                    symptoms[code] = symptomCursor.getInt(1).coerceIn(1, 3)
-                                }
-                            }
-                        }
-                        WidgetState(
-                            mood = cursor.getInt(1).coerceIn(1, 5),
-                            energy = cursor.getInt(2).coerceIn(1, 5),
-                            symptoms = symptoms,
-                        )
-                    }
-                }
-                WidgetData(true, checkin)
-            } finally {
-                database.close()
+            val checkin = widgetGetDailyCheckin(database.absolutePath, todayIso())
+            val state = checkin?.let {
+                WidgetState(
+                    mood = it.moodScore,
+                    energy = it.energyScore,
+                    symptoms = it.symptoms.associate { symptom ->
+                        symptom.code to symptom.severity
+                    },
+                )
             }
+            WidgetData(true, state)
         } catch (_: Exception) {
             WidgetData(false, null)
         }

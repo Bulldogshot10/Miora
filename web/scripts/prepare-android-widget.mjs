@@ -1,4 +1,5 @@
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,6 +47,32 @@ await Promise.all([
   mkdir(valuesDir, { recursive: true }),
 ]);
 
+
+const javaRoot = resolve(generatedAndroidDir, "java");
+const gradlePath = resolve(webDir, "src-tauri/gen/android/app/build.gradle");
+
+function run(command, args, cwd) {
+  const result = spawnSync(command, args, { cwd, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(command + " failed with exit code " + result.status);
+  }
+}
+
+async function copyGeneratedKotlin(source, destination) {
+  let copied = 0;
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const from = resolve(source, entry.name);
+    if (entry.isDirectory()) {
+      copied += await copyGeneratedKotlin(from, destination);
+    } else if (entry.isFile() && entry.name.endsWith(".kt")) {
+      await copyFile(from, resolve(destination, entry.name));
+      copied += 1;
+    }
+  }
+  return copied;
+}
+
 const sourceDir = resolve(webDir, "android-widget");
 await copyFile(
   resolve(sourceDir, "MioraWidgetProvider.kt"),
@@ -73,4 +100,48 @@ const providerPath = resolve(javaDir, "MioraWidgetProvider.kt");
 const providerSource = await readFile(providerPath, "utf8");
 await writeFile(providerPath, providerSource.replace("package __PACKAGE__", "package " + packageName));
 
-console.log("Miora Android home-screen widget prepared.");
+
+const bindingsOutput = resolve(webDir, ".uniffi-generated");
+await rm(bindingsOutput, { recursive: true, force: true });
+await mkdir(bindingsOutput, { recursive: true });
+run(
+  "cargo",
+  [
+    "run",
+    "--manifest-path",
+    resolve(webDir, "src-tauri/Cargo.toml"),
+    "--features",
+    "uniffi-cli",
+    "--bin",
+    "uniffi-bindgen",
+    "--",
+    "generate",
+    "src:miora_lib",
+    "--language",
+    "kotlin",
+    "--out-dir",
+    bindingsOutput,
+  ],
+  resolve(webDir, "src-tauri"),
+);
+const generatedBindings = await copyGeneratedKotlin(bindingsOutput, javaRoot);
+await rm(bindingsOutput, { recursive: true, force: true });
+if (generatedBindings === 0) {
+  throw new Error("UniFFI did not generate any Kotlin source files.");
+}
+
+let gradle = await readFile(gradlePath, "utf8");
+if (!gradle.includes("net.java.dev.jna:jna:")) {
+  const dependencyBlock = gradle.match(/dependencies\s*\{/);
+  if (!dependencyBlock) {
+    throw new Error("Could not find the Android app dependencies block for JNA.");
+  }
+  gradle = gradle.replace(
+    dependencyBlock[0],
+    dependencyBlock[0] + "\n    implementation 'net.java.dev.jna:jna:5.19.1@aar'",
+  );
+  await writeFile(gradlePath, gradle);
+}
+
+console.log("Miora Android widget and UniFFI Kotlin bindings prepared.");
+

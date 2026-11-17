@@ -91,7 +91,7 @@ The app supports Android API 26 and newer.
 
 Miora includes a resizable **Daily Check-in** home-screen widget. Add it from the Android launcher widget picker. The widget lets you choose mood and energy (1–5), cycle each symptom through mild, moderate, severe, or off, and save today's entry without opening the app.
 
-The widget writes to the same private SQLite database used by the Tauri/Rust app. Open Miora once after installation to initialize the database. Android widget source files live in `web/android-widget/`; the Android build command automatically copies them into Tauri's generated Android project and registers the widget receiver.
+The widget calls the Rust check-in API through UniFFI and writes to the same private SQLite repository used by the Tauri app. Rust owns validation and persistence; Kotlin only handles Android widget UI and lifecycle. Open Miora once after installation to initialize the database. Android widget source files live in `web/android-widget/`; the Android build command generates Kotlin bindings, adds the JNA runtime, copies the widget sources into Tauri's generated Android project, and registers the widget receiver.
 
 ## Rust checks
 

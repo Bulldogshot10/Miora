@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 use chrono::{Local, NaiveDate};
 use miora::domain::{
@@ -14,6 +14,8 @@ use miora::engine::{
 use miora::storage::repository::{PeriodBleedingRecord, Repository};
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
+
+uniffi::setup_scaffolding!();
 
 struct BackendState {
     repository: Mutex<Repository>,
@@ -82,19 +84,114 @@ struct DashboardSnapshot {
     bleeding_prompt: Option<BleedingPrompt>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 #[serde(rename_all = "camelCase")]
-struct DailyCheckinInput {
-    date: String,
-    mood_score: i32,
-    energy_score: i32,
-    symptoms: Vec<SymptomInput>,
+pub struct DailyCheckinInput {
+    pub date: String,
+    pub mood_score: i32,
+    pub energy_score: i32,
+    pub symptoms: Vec<SymptomInput>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SymptomInput {
-    code: String,
-    severity: i32,
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+pub struct SymptomInput {
+    pub code: String,
+    pub severity: i32,
+}
+
+
+#[derive(Debug, uniffi::Error)]
+#[uniffi(flat_error)]
+pub enum WidgetApiError {
+    Message(String),
+}
+
+impl std::fmt::Display for WidgetApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Message(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for WidgetApiError {}
+
+fn load_daily_checkin_from_repository(
+    repository: &Repository,
+    date: NaiveDate,
+) -> Result<Option<DailyCheckinInput>, String> {
+    let Some(checkin) = repository
+        .daily_checkin(date)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(DailyCheckinInput {
+        date: date.format("%Y-%m-%d").to_string(),
+        mood_score: checkin.mood_score,
+        energy_score: checkin.energy_score,
+        symptoms: checkin
+            .symptoms
+            .into_iter()
+            .map(|entry| SymptomInput {
+                code: entry.code.as_str().to_string(),
+                severity: entry.severity.as_i32(),
+            })
+            .collect(),
+    }))
+}
+
+fn save_daily_checkin_to_repository(
+    repository: &Repository,
+    input: DailyCheckinInput,
+) -> Result<(), String> {
+    let date = NaiveDate::parse_from_str(&input.date, "%Y-%m-%d")
+        .map_err(|_| "Choose a valid check-in date.".to_string())?;
+
+    if date > Local::now().date_naive() {
+        return Err("A check-in date cannot be in the future.".to_string());
+    }
+
+    let mut symptoms = Vec::with_capacity(input.symptoms.len());
+    for item in input.symptoms {
+        let code = SymptomCode::parse_key(&item.code)
+            .ok_or_else(|| format!("Unknown symptom code: {}", item.code))?;
+
+        let severity = Severity::from_i32(item.severity)
+            .ok_or_else(|| "Symptom severity must be between 1 and 3.".to_string())?;
+
+        symptoms.push(SymptomEntry { code, severity });
+    }
+
+    repository
+        .save_daily_checkin(date, input.mood_score, input.energy_score, &symptoms)
+        .map_err(|error| error.to_string())
+}
+
+#[uniffi::export]
+pub fn widget_get_daily_checkin(
+    database_path: String,
+    date: String,
+) -> Result<Option<DailyCheckinInput>, WidgetApiError> {
+    let parsed_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+        .map_err(|_| WidgetApiError::Message("Choose a valid check-in date.".to_string()))?;
+    let repository = Repository::open(Path::new(&database_path))
+        .map_err(|error| WidgetApiError::Message(error.to_string()))?;
+
+    load_daily_checkin_from_repository(&repository, parsed_date)
+        .map_err(WidgetApiError::Message)
+}
+
+#[uniffi::export]
+pub fn widget_save_daily_checkin(
+    database_path: String,
+    input: DailyCheckinInput,
+) -> Result<(), WidgetApiError> {
+    let repository = Repository::open(Path::new(&database_path))
+        .map_err(|error| WidgetApiError::Message(error.to_string()))?;
+
+    save_daily_checkin_to_repository(&repository, input).map_err(WidgetApiError::Message)
 }
 
 fn confirmed_duration_for_current_period(record: Option<PeriodBleedingRecord>) -> Option<u32> {
@@ -449,26 +546,7 @@ fn get_daily_checkin(
         .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
 
-    let Some(checkin) = repository
-        .daily_checkin(parsed)
-        .map_err(|error| error.to_string())?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(DailyCheckinInput {
-        date,
-        mood_score: checkin.mood_score,
-        energy_score: checkin.energy_score,
-        symptoms: checkin
-            .symptoms
-            .into_iter()
-            .map(|entry| SymptomInput {
-                code: entry.code.as_str().to_string(),
-                severity: entry.severity.as_i32(),
-            })
-            .collect(),
-    }))
+    load_daily_checkin_from_repository(&repository, parsed)
 }
 
 #[tauri::command]
@@ -476,33 +554,12 @@ fn save_daily_checkin(
     input: DailyCheckinInput,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
-    let date = NaiveDate::parse_from_str(&input.date, "%Y-%m-%d")
-        .map_err(|_| "Choose a valid check-in date.".to_string())?;
-
-    if date > Local::now().date_naive() {
-        return Err("A check-in date cannot be in the future.".to_string());
-    }
-
-    let mut symptoms = Vec::with_capacity(input.symptoms.len());
-    for item in input.symptoms {
-        let code = SymptomCode::parse_key(&item.code)
-            .ok_or_else(|| format!("Unknown symptom code: {}", item.code))?;
-
-        let severity = Severity::from_i32(item.severity)
-            .ok_or_else(|| "Symptom severity must be between 1 and 3.".to_string())?;
-
-        symptoms.push(SymptomEntry { code, severity });
-    }
-
     let repository = backend
         .repository
         .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
 
-    repository
-        .save_daily_checkin(date, input.mood_score, input.energy_score, &symptoms)
-        .map_err(|error| error.to_string())?;
-
+    save_daily_checkin_to_repository(&repository, input)?;
     dashboard_snapshot(&repository)
 }
 
@@ -541,6 +598,52 @@ mod tests {
     fn date(year: i32, month: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(year, month, day).unwrap()
     }
+
+
+    #[test]
+    fn widget_ffi_round_trip_uses_the_same_daily_checkin_repository() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("miora-widget-ffi-{nonce}.sqlite3"));
+        let database_path = path.to_string_lossy().into_owned();
+
+        let input = DailyCheckinInput {
+            date: "2026-03-03".to_string(),
+            mood_score: 4,
+            energy_score: 2,
+            symptoms: vec![
+                SymptomInput { code: "cramps".to_string(), severity: 3 },
+                SymptomInput { code: "fatigue".to_string(), severity: 1 },
+            ],
+        };
+
+        widget_save_daily_checkin(database_path.clone(), input).unwrap();
+        let restored = widget_get_daily_checkin(database_path, "2026-03-03".to_string())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(restored.mood_score, 4);
+        assert_eq!(restored.energy_score, 2);
+        assert_eq!(restored.symptoms.len(), 2);
+        assert!(restored.symptoms.iter().any(|entry| {
+            entry.code == "cramps" && entry.severity == 3
+        }));
+        assert!(restored.symptoms.iter().any(|entry| {
+            entry.code == "fatigue" && entry.severity == 1
+        }));
+
+        drop(restored);
+        let _ = std::fs::remove_file(&path);
+        let mut wal = path.as_os_str().to_os_string();
+        wal.push("-wal");
+        let _ = std::fs::remove_file(std::path::PathBuf::from(wal));
+        let mut shm = path.as_os_str().to_os_string();
+        shm.push("-shm");
+        let _ = std::fs::remove_file(std::path::PathBuf::from(shm));
+    }
+
 
     #[test]
     fn symptom_inference_uses_positive_and_negative_same_day_checkins() {

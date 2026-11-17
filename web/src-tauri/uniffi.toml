@@ -1,0 +1,5 @@
+[bindings.kotlin]
+package_name = "com.bulldogshot10.miora.uniffi"
+cdylib_name = "miora_lib"
+android = true
+java_8_compatible = true
