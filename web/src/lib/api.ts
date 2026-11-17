@@ -265,7 +265,7 @@ function makePhaseEstimate(
     ["luteal", probabilities.luteal, "luteal", "Luteal phase", "The model estimates that this day is most likely in the luteal phase, after ovulation."],
     ["uncertain", probabilities.uncertain, "uncertain", "Cycle timing uncertain", "The current cycle day is beyond the lengths represented by the model. More recent period observations are needed to estimate the phase."],
   ];
-  const mostLikely = candidates.reduce((best, candidate) => candidate[1] > best[1] ? candidate : best);
+  const mostLikely = candidates.reduce((best, candidate) => candidate[1] >= best[1] ? candidate : best);
   const confidence = mostLikely[1];
   const learning = confidence < 0.55;
   const expectedCycleLength = intervals.length > 0
@@ -354,7 +354,7 @@ function browserSnapshot(): DashboardSnapshot {
     const mad = median(deviations) ?? 0;
     const radius = Math.max(1, Math.ceil(mad * 1.4826));
     expectedNextPeriodStart = addLocalDays(latest, Math.round(center));
-    earliestNextPeriodStart = addLocalDays(latest, Math.max(1, Math.round(center) - radius));
+    earliestNextPeriodStart = addLocalDays(latest, Math.max(0, Math.round(center) - radius));
     latestNextPeriodStart = addLocalDays(latest, Math.round(center) + radius);
   }
 
