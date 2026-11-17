@@ -318,8 +318,8 @@ class MioraWidgetProvider : AppWidgetProvider() {
     }
 
     private fun databaseFile(context: Context): File {
-        // Tauri app_data_dir() resolves to dataDir/<bundle identifier> on Android.
-        return File(context.dataDir, context.packageName + "/miora.sqlite3")
+        // Tauri's Android path resolver maps app_data_dir() to Context.dataDir.
+        return File(context.dataDir, "miora.sqlite3")
     }
 
     private fun todayIso(): String =
