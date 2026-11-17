@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::NaiveDate;
 use rusqlite::{OptionalExtension, params};
 
@@ -30,8 +32,25 @@ impl Repository {
         })
     }
 
-    pub fn add_period_start(&self, date: NaiveDate) -> Result<bool, rusqlite::Error> {
+    pub fn add_period_start(&self, date: NaiveDate) -> Result<bool, Box<dyn std::error::Error>> {
         let date_text = date.format("%Y-%m-%d").to_string();
+        let overlaps_previous: bool = self.database.connection().query_row(
+            "
+            SELECT EXISTS(
+                SELECT 1 FROM periods
+                WHERE start_date < ?1
+                  AND end_date IS NOT NULL
+                  AND end_date >= ?1
+            )
+            ",
+            params![date_text],
+            |row| row.get(0),
+        )?;
+
+        if overlaps_previous {
+            return Err("The new period start overlaps a previously recorded bleeding interval.".into());
+        }
+
         let changed = self.database.connection().execute(
             "INSERT OR IGNORE INTO periods (start_date) VALUES (?1)",
             params![date_text],
@@ -51,6 +70,19 @@ impl Repository {
 
         let start_text = start.format("%Y-%m-%d").to_string();
         let end_text = end.format("%Y-%m-%d").to_string();
+        let next_start: Option<String> = self.database.connection().query_row(
+            "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
+            params![start_text],
+            |row| row.get(0),
+        )?;
+
+        if let Some(next_start) = next_start {
+            let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
+            if end >= next_start {
+                return Err("The last bleeding day must be before the next recorded period start.".into());
+            }
+        }
+
         let changed = self.database.connection().execute(
             "
             UPDATE periods
@@ -74,6 +106,7 @@ impl Repository {
         start: NaiveDate,
         observation_date: NaiveDate,
         still_bleeding: bool,
+        last_bleeding_date: Option<NaiveDate>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if observation_date < start {
             return Err("The observation date cannot be before the period start.".into());
@@ -98,19 +131,36 @@ impl Repository {
                 return Err("The period start date could not be found.".into());
             }
         } else {
-            let previous_day = observation_date
-                .pred_opt()
-                .ok_or("The observation date is out of range.")?;
-            let previous_day_text = previous_day.format("%Y-%m-%d").to_string();
+            let last_bleeding_date = last_bleeding_date
+                .ok_or("Select the last day you were bleeding.")?;
+
+            if last_bleeding_date < start || last_bleeding_date > observation_date {
+                return Err("The last bleeding day must be between the period start and today's check.".into());
+            }
+
+            let last_bleeding_text = last_bleeding_date.format("%Y-%m-%d").to_string();
+            let next_start: Option<String> = self.database.connection().query_row(
+                "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
+                params![start_text],
+                |row| row.get(0),
+            )?;
+
+            if let Some(next_start) = next_start {
+                let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
+                if last_bleeding_date >= next_start {
+                    return Err("The last bleeding day must be before the next recorded period start.".into());
+                }
+            }
 
             let changed = self.database.connection().execute(
                 "
                 UPDATE periods
-                SET end_date = COALESCE(last_bleeding_observation, ?1),
+                SET end_date = ?1,
+                    last_bleeding_observation = ?1,
                     bleeding_end_confirmed = 1
                 WHERE start_date = ?2
                 ",
-                params![previous_day_text, start_text],
+                params![last_bleeding_text, start_text],
             )?;
 
             if changed == 0 {
@@ -327,6 +377,40 @@ impl Repository {
             energy_score,
             symptoms,
         }))
+    }
+
+
+    pub fn daily_checkins_with_symptoms(
+        &self,
+    ) -> Result<Vec<(NaiveDate, Vec<SymptomCode>)>, Box<dyn std::error::Error>> {
+        let mut statement = self.database.connection().prepare(
+            "
+            SELECT checkins.checkin_date, symptoms.symptom_code
+            FROM daily_checkins AS checkins
+            LEFT JOIN symptoms ON symptoms.checkin_id = checkins.id
+            ORDER BY checkins.checkin_date ASC
+            ",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        })?;
+
+        let mut grouped: BTreeMap<NaiveDate, Vec<SymptomCode>> = BTreeMap::new();
+        for row in rows {
+            let (date, code) = row?;
+            let date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")?;
+            let entries = grouped.entry(date).or_default();
+            if let Some(code) = code {
+                let code = SymptomCode::parse_key(&code)
+                    .ok_or_else(|| format!("Unknown symptom code in database: {code}"))?;
+                entries.push(code);
+            }
+        }
+
+        Ok(grouped.into_iter().collect())
     }
 
     pub fn daily_checkin_count(&self) -> Result<usize, rusqlite::Error> {
