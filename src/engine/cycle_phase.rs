@@ -199,7 +199,7 @@ pub fn estimate_cycle_phase(
         .collect();
 
     let mut cycle_posterior =
-        CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.2);
+        CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.02);
     for length in &observed_cycle_lengths {
         cycle_posterior.observe(*length);
     }
