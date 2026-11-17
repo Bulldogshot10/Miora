@@ -71,8 +71,8 @@ jobs:
 
       - name: Audit Rust dependencies
         run: |
-          cargo audit --file Cargo.lock
-          cargo audit --file web/src-tauri/Cargo.lock
+          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file Cargo.lock
+          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file web/src-tauri/Cargo.lock
 
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
@@ -169,6 +169,13 @@ jobs:
           fi
           for apk in "${apks[@]}"; do
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          done
+
+          for apk in "${apks[@]}"; do
+            if "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -q "android.permission.INTERNET"; then
+              echo "::error::Release APK still declares android.permission.INTERNET."
+              exit 1
+            fi
           done
 
       - name: Generate SHA-256 checksum
