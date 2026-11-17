@@ -1,4 +1,4 @@
-use jiff::{civil::Date as NaiveDate, ToSpan};
+use jiff::civil::Date as NaiveDate;
 
 use crate::domain::cycle::{cycle_day, cycle_length_days};
 use crate::engine::cycle_estimator::estimate_next_period;
