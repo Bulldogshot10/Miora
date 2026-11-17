@@ -31,8 +31,8 @@ jobs:
         run: |
           sdkmanager --install \
             "platform-tools" \
-            "platforms;android-37" \
-            "build-tools;37.0.0" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
             "ndk;30.0.16248370"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
