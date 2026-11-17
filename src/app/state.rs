@@ -146,14 +146,16 @@ fn build_calendar_weeks(today: NaiveDate, period_starts: &[NaiveDate]) -> Vec<[C
         .as_chunks::<7>()
         .0
         .iter()
-        .map(|chunk| [
-            chunk[0].clone(),
-            chunk[1].clone(),
-            chunk[2].clone(),
-            chunk[3].clone(),
-            chunk[4].clone(),
-            chunk[5].clone(),
-            chunk[6].clone(),
-        ])
+        .map(|chunk| {
+            [
+                chunk[0].clone(),
+                chunk[1].clone(),
+                chunk[2].clone(),
+                chunk[3].clone(),
+                chunk[4].clone(),
+                chunk[5].clone(),
+                chunk[6].clone(),
+            ]
+        })
         .collect()
 }
