@@ -15,11 +15,7 @@ fn estimator_waits_for_two_completed_intervals() {
 
 #[test]
 fn estimator_returns_a_window_from_logged_history() {
-    let starts = [
-        date(2026, 1, 1),
-        date(2026, 1, 29),
-        date(2026, 2, 26),
-    ];
+    let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
 
     let prediction = estimate_next_period(&starts).unwrap();
 

@@ -28,8 +28,7 @@ CREATE TABLE symptoms (
 "#;
 
 pub fn migrate(connection: &Connection) -> Result<()> {
-    let version: i32 =
-        connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let version: i32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
     if version < 1 {
         let has_legacy_period_table: bool = connection.query_row(

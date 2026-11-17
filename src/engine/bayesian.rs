@@ -44,8 +44,7 @@ impl CycleLengthPosterior {
         }
 
         let total_observations: u32 = self.counts.iter().sum();
-        let denominator =
-            total_observations as f64 + self.prior_per_day * self.counts.len() as f64;
+        let denominator = total_observations as f64 + self.prior_per_day * self.counts.len() as f64;
         let observed = self.counts[(cycle_length_days - self.min_days) as usize] as f64;
 
         Some((observed + self.prior_per_day) / denominator)
@@ -58,9 +57,7 @@ impl CycleLengthPosterior {
 
         (self.min_days..=self.max_days)
             .zip(self.counts.iter())
-            .map(|(day, count)| {
-                day as f64 * (*count as f64 + self.prior_per_day) / denominator
-            })
+            .map(|(day, count)| day as f64 * (*count as f64 + self.prior_per_day) / denominator)
             .sum()
     }
 

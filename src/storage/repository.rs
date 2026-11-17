@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
 use crate::domain::symptom::SymptomEntry;
 use crate::storage::database::Database;
@@ -25,12 +25,11 @@ impl Repository {
         Ok(changed == 1)
     }
 
-    pub fn period_start_dates(
-        &self,
-    ) -> Result<Vec<NaiveDate>, Box<dyn std::error::Error>> {
-        let mut statement = self.database.connection().prepare(
-            "SELECT start_date FROM periods ORDER BY start_date ASC",
-        )?;
+    pub fn period_start_dates(&self) -> Result<Vec<NaiveDate>, Box<dyn std::error::Error>> {
+        let mut statement = self
+            .database
+            .connection()
+            .prepare("SELECT start_date FROM periods ORDER BY start_date ASC")?;
         let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
 
         let mut dates = Vec::new();
@@ -101,11 +100,7 @@ impl Repository {
                 INSERT INTO symptoms (checkin_id, symptom_code, severity)
                 VALUES (?1, ?2, ?3)
                 ",
-                params![
-                    checkin_id,
-                    symptom.code.as_str(),
-                    symptom.severity.as_i32()
-                ],
+                params![checkin_id, symptom.code.as_str(), symptom.severity.as_i32()],
             )?;
         }
 

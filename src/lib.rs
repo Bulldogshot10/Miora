@@ -84,11 +84,9 @@ pub fn run(database_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(window) = window_handle.upgrade() {
             window.set_status_message(message.into());
-            if let Err(error) = refresh_window(
-                &window,
-                &period_repository,
-                Local::now().date_naive(),
-            ) {
+            if let Err(error) =
+                refresh_window(&window, &period_repository, Local::now().date_naive())
+            {
                 window.set_status_message(format!("Could not refresh Miora: {error}").into());
             }
         }
@@ -117,15 +115,11 @@ pub fn run(database_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let today = Local::now().date_naive();
-            let message = match checkin_repository.save_daily_checkin(
-                today,
-                mood,
-                energy,
-                &symptoms,
-            ) {
-                Ok(()) => "Today's check-in has been saved.".to_string(),
-                Err(error) => format!("Could not save check-in: {error}"),
-            };
+            let message =
+                match checkin_repository.save_daily_checkin(today, mood, energy, &symptoms) {
+                    Ok(()) => "Today's check-in has been saved.".to_string(),
+                    Err(error) => format!("Could not save check-in: {error}"),
+                };
 
             if let Some(window) = window_handle.upgrade() {
                 window.set_status_message(message.into());
