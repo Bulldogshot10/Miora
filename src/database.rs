@@ -34,10 +34,7 @@ impl Database {
     }
 
     /// Stores a period's first day. Returns false when the date was already logged.
-    pub fn add_period_start(
-        &self,
-        date: NaiveDate,
-    ) -> Result<bool, rusqlite::Error> {
+    pub fn add_period_start(&self, date: NaiveDate) -> Result<bool, rusqlite::Error> {
         let date_text = date.format("%Y-%m-%d").to_string();
 
         let changed = self.connection.execute(
@@ -48,9 +45,7 @@ impl Database {
         Ok(changed == 1)
     }
 
-    pub fn latest_period_start(
-        &self,
-    ) -> Result<Option<NaiveDate>, Box<dyn std::error::Error>> {
+    pub fn latest_period_start(&self) -> Result<Option<NaiveDate>, Box<dyn std::error::Error>> {
         let value: Option<String> = self
             .connection
             .query_row(
@@ -76,10 +71,8 @@ mod tests {
 
     #[test]
     fn stores_a_period_start_only_once() {
-        let database_path = std::env::temp_dir().join(format!(
-            "miora-test-{}.sqlite3",
-            std::process::id()
-        ));
+        let database_path =
+            std::env::temp_dir().join(format!("miora-test-{}.sqlite3", std::process::id()));
         let _ = std::fs::remove_file(&database_path);
 
         let database = Database::open(&database_path).unwrap();
