@@ -122,21 +122,41 @@ jobs:
           '''
 
           if 'create("release")' not in source:
+              if "buildTypes {" not in source:
+                  raise SystemExit("Could not find the Gradle buildTypes block; refusing to create an unsigned release.")
               source = source.replace("buildTypes {", signing_block + "buildTypes {", 1)
 
           release_marker = 'getByName("release") {'
-          if release_marker in source and 'signingConfig = signingConfigs.getByName("release")' not in source:
+          if release_marker not in source:
+              raise SystemExit("Could not find the release build type; refusing to create an unsigned release.")
+
+          signing_line = 'signingConfig = signingConfigs.getByName("release")'
+          if signing_line not in source:
               source = source.replace(
                   release_marker,
-                  release_marker + '\n            signingConfig = signingConfigs.getByName("release")',
+                  release_marker + '\n            ' + signing_line,
                   1
               )
+
+          if signing_line not in source or 'create("release")' not in source:
+              raise SystemExit("Release signing config was not applied.")
 
           gradle_file.write_text(source)
           PY
 
       - name: Build signed release APK
         run: npm run tauri:android:release --prefix web
+
+      - name: Verify release APK signatures
+        run: |
+          mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "::error::No release APK was produced."
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          done
 
       - name: Generate SHA-256 checksum
         run: |
