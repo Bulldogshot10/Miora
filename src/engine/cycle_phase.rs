@@ -7,8 +7,8 @@ const MIN_CYCLE_LENGTH: u32 = 21;
 const MAX_CYCLE_LENGTH: u32 = 45;
 const MIN_LUTEAL_LENGTH: u32 = 12;
 const MAX_LUTEAL_LENGTH: u32 = 16;
-const MIN_BLEEDING_DAYS: u32 = 2;
-const MAX_BLEEDING_DAYS: u32 = 10;
+const MIN_BLEEDING_DAYS: u32 = 1;
+const MAX_BLEEDING_DAYS: u32 = 14;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CyclePhase {
@@ -39,7 +39,7 @@ impl CyclePhase {
             Self::OvulationWindow => "Estimated ovulation window",
             Self::Luteal => "Luteal phase",
             Self::Uncertain => "Cycle timing uncertain",
-            Self::Learning => "Still learning her cycle",
+            Self::Learning => "Still learning your cycle",
         }
     }
 
@@ -102,7 +102,7 @@ impl Default for BleedingDurationPosterior {
         // personal duration adds an observation and progressively dominates it.
         Self {
             counts: vec![0; (MAX_BLEEDING_DAYS - MIN_BLEEDING_DAYS + 1) as usize],
-            prior_weights: vec![0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1],
+            prior_weights: vec![0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01],
         }
     }
 }
@@ -196,7 +196,6 @@ pub fn estimate_cycle_phase(
         .collect();
     let cycle_history_available = !observed_cycle_lengths.is_empty();
     let bleeding_history_available = confirmed_current_bleeding_days.is_some()
-        || observed_bleeding_through_day.is_some()
         || !completed_bleeding_durations.is_empty();
 
     if let Some(observed_day) = observed_bleeding_through_day
@@ -205,7 +204,7 @@ pub fn estimate_cycle_phase(
         return Some(fixed_menstrual_estimate(
             cycle_day,
             cycle_history_available,
-            true,
+            bleeding_history_available,
             observed_cycle_lengths.len(),
             completed_bleeding_durations.len(),
         ));
@@ -347,6 +346,7 @@ fn normalize_probabilities(probabilities: &mut PhaseProbabilities) {
     probabilities.follicular /= total;
     probabilities.ovulation_window /= total;
     probabilities.luteal /= total;
+    probabilities.uncertain /= total;
 }
 
 #[cfg(test)]
@@ -407,9 +407,57 @@ mod tests {
         let sum = probabilities.menstrual
             + probabilities.follicular
             + probabilities.ovulation_window
-            + probabilities.luteal;
+            + probabilities.luteal
+            + probabilities.uncertain;
 
         assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+
+    #[test]
+    fn cycle_beyond_supported_range_is_uncertain_not_luteal() {
+        let start = date(2026, 1, 1);
+        let estimate = estimate_cycle_phase(
+            &[start],
+            &[],
+            date(2026, 2, 19),
+            None,
+            None,
+        ).unwrap();
+
+        assert_eq!(estimate.cycle_day, 50);
+        assert_eq!(estimate.phase, CyclePhase::Uncertain);
+        assert!((estimate.probabilities.uncertain - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn confirmed_bleeding_duration_over_ten_days_is_not_clamped() {
+        let start = date(2026, 1, 1);
+        let estimate = estimate_cycle_phase(
+            &[start],
+            &[],
+            date(2026, 1, 12),
+            Some(12),
+            None,
+        ).unwrap();
+
+        assert_eq!(estimate.phase, CyclePhase::Menstrual);
+        assert!((estimate.probabilities.menstrual - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn current_bleeding_observation_alone_is_not_historical_personalization() {
+        let start = date(2026, 1, 1);
+        let estimate = estimate_cycle_phase(
+            &[start],
+            &[],
+            date(2026, 1, 5),
+            None,
+            Some(5),
+        ).unwrap();
+
+        assert!(!estimate.is_personalized);
+        assert!(!estimate.bleeding_history_available);
     }
 
     #[test]
