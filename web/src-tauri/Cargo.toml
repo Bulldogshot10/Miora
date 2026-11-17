@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 miora = { package = "miora-core", path = "../.." }
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2", features = [] }
+tauri = { version = ">=2.11.6, <3.0.0", features = [] }
 uniffi = "=0.32.2"
 
 [features]
