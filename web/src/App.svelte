@@ -27,6 +27,8 @@
 
   onMount(() => {
     void refresh();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   });
 
   async function refresh() {
@@ -38,6 +40,16 @@
       errorMessage = String(error);
     } finally {
       loading = false;
+    }
+  }
+
+  async function handleVisibilityChange() {
+    if (document.visibilityState !== "visible") return;
+    try {
+      snapshot = await getDashboardSnapshot();
+      errorMessage = "";
+    } catch (error) {
+      errorMessage = String(error);
     }
   }
 
