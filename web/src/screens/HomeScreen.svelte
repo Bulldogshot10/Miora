@@ -149,7 +149,7 @@
     <section class="phase-card">
       <p class="eyebrow">CYCLE PHASE</p>
       <h3>Log a period start to begin</h3>
-      <p>Miora will build a phase distribution from her period dates and confirmed bleeding durations.</p>
+      <p>Miora will build a phase distribution from your period dates and confirmed bleeding durations.</p>
     </section>
   {/if}
 
