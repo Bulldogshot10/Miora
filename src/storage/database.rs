@@ -123,8 +123,13 @@ fn migrate_plaintext_database(
 
         // The path is a bound parameter. The key expression contains only
         // lowercase hex generated from the validated 32-byte random key.
-        let attach = Zeroizing::new(format!(r#"ATTACH DATABASE ?1 AS encrypted KEY "x'{key_hex}'";"#));
-        source.execute(attach.as_str(), params![temporary_path.to_string_lossy().as_ref()])?;
+        let attach = Zeroizing::new(format!(
+            r#"ATTACH DATABASE ?1 AS encrypted KEY "x'{key_hex}'";"#
+        ));
+        source.execute(
+            attach.as_str(),
+            params![temporary_path.to_string_lossy().as_ref()],
+        )?;
         source.execute_batch("SELECT sqlcipher_export('encrypted');")?;
         source.execute_batch("DETACH DATABASE encrypted;")?;
         drop(source);
