@@ -1,9 +1,9 @@
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 use miora::engine::bayesian::CycleLengthPosterior;
 use miora::engine::cycle_estimator::estimate_next_period;
 
 fn date(year: i32, month: u32, day: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    NaiveDate::new(year as i16, month as i8, day as i8).unwrap()
 }
 
 #[test]
