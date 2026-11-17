@@ -48,7 +48,9 @@ impl Repository {
         )?;
 
         if overlaps_previous {
-            return Err("The new period start overlaps a previously recorded bleeding interval.".into());
+            return Err(
+                "The new period start overlaps a previously recorded bleeding interval.".into(),
+            );
         }
 
         let changed = self.database.connection().execute(
@@ -79,7 +81,9 @@ impl Repository {
         if let Some(next_start) = next_start {
             let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
             if end >= next_start {
-                return Err("The last bleeding day must be before the next recorded period start.".into());
+                return Err(
+                    "The last bleeding day must be before the next recorded period start.".into(),
+                );
             }
         }
 
@@ -131,11 +135,14 @@ impl Repository {
                 return Err("The period start date could not be found.".into());
             }
         } else {
-            let last_bleeding_date = last_bleeding_date
-                .ok_or("Select the last day you were bleeding.")?;
+            let last_bleeding_date =
+                last_bleeding_date.ok_or("Select the last day you were bleeding.")?;
 
             if last_bleeding_date < start || last_bleeding_date > observation_date {
-                return Err("The last bleeding day must be between the period start and today's check.".into());
+                return Err(
+                    "The last bleeding day must be between the period start and today's check."
+                        .into(),
+                );
             }
 
             let last_bleeding_text = last_bleeding_date.format("%Y-%m-%d").to_string();
@@ -148,7 +155,10 @@ impl Repository {
             if let Some(next_start) = next_start {
                 let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
                 if last_bleeding_date >= next_start {
-                    return Err("The last bleeding day must be before the next recorded period start.".into());
+                    return Err(
+                        "The last bleeding day must be before the next recorded period start."
+                            .into(),
+                    );
                 }
             }
 
@@ -379,7 +389,6 @@ impl Repository {
         }))
     }
 
-
     pub fn daily_checkins_with_symptoms(
         &self,
     ) -> Result<Vec<(NaiveDate, Vec<SymptomCode>)>, Box<dyn std::error::Error>> {
@@ -392,10 +401,7 @@ impl Repository {
             ",
         )?;
         let rows = statement.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
         })?;
 
         let mut grouped: BTreeMap<NaiveDate, Vec<SymptomCode>> = BTreeMap::new();
