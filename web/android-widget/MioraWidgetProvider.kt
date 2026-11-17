@@ -71,7 +71,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             return
         }
 
-        val current = visibleState(context, widgetId, data.checkin)
+        val current = visibleState(context, widgetId, data.checkin, data.ready)
         val prefs = preferences(context, widgetId)
 
         when (intent.action) {
