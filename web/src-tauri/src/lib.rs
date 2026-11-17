@@ -9,6 +9,7 @@ use miora::engine::{
     cycle_estimator::estimate_next_period,
     cycle_phase::{estimate_bleeding_duration, estimate_cycle_phase},
     statistics::mean,
+    symptom_model::{SymptomObservation, probability_on_cycle_day},
 };
 use miora::storage::repository::{PeriodBleedingRecord, Repository};
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,7 @@ struct PhaseProbabilitiesDto {
     follicular: f64,
     ovulation_window: f64,
     luteal: f64,
+    uncertain: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,7 +41,18 @@ struct CyclePhaseSnapshot {
     confidence: f64,
     probabilities: PhaseProbabilitiesDto,
     is_personalized: bool,
+    cycle_history_available: bool,
+    bleeding_history_available: bool,
     description: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SymptomPatternSnapshot {
+    code: String,
+    label: String,
+    probability: f64,
+    observations_used: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +78,7 @@ struct DashboardSnapshot {
     period_starts: Vec<String>,
     checkin_dates: Vec<String>,
     phase: Option<CyclePhaseSnapshot>,
+    symptom_patterns: Vec<SymptomPatternSnapshot>,
     bleeding_prompt: Option<BleedingPrompt>,
 }
 
@@ -176,10 +190,65 @@ fn phase_snapshot_for_today(
             follicular: estimate.probabilities.follicular,
             ovulation_window: estimate.probabilities.ovulation_window,
             luteal: estimate.probabilities.luteal,
+            uncertain: estimate.probabilities.uncertain,
         },
         is_personalized: estimate.is_personalized,
+        cycle_history_available: estimate.cycle_history_available,
+        bleeding_history_available: estimate.bleeding_history_available,
         description: estimate.phase.description().to_string(),
     })
+}
+
+
+fn symptom_patterns_for_cycle_day(
+    repository: &Repository,
+    starts: &[NaiveDate],
+    target_cycle_day: u32,
+) -> Result<Vec<SymptomPatternSnapshot>, String> {
+    let checkins = repository
+        .daily_checkins_with_symptoms()
+        .map_err(|error| error.to_string())?;
+    let codes = [
+        SymptomCode::Cramps,
+        SymptomCode::Bloating,
+        SymptomCode::Headache,
+        SymptomCode::Fatigue,
+        SymptomCode::MoodChanges,
+    ];
+
+    let mut patterns = Vec::new();
+    for code in codes {
+        let observations: Vec<SymptomObservation> = checkins
+            .iter()
+            .filter_map(|(date, symptoms)| {
+                let start = starts.iter().rev().find(|start| **start <= *date)?;
+                let cycle_day = (*date - *start).num_days() as u32 + 1;
+                Some(SymptomObservation {
+                    cycle_day,
+                    occurred: symptoms.contains(&code),
+                })
+            })
+            .collect();
+
+        let matching_count = observations
+            .iter()
+            .filter(|entry| entry.cycle_day == target_cycle_day)
+            .count();
+        if matching_count == 0 {
+            continue;
+        }
+
+        if let Some(probability) = probability_on_cycle_day(&observations, target_cycle_day) {
+            patterns.push(SymptomPatternSnapshot {
+                code: code.as_str().to_string(),
+                label: code.label().to_string(),
+                probability,
+                observations_used: matching_count,
+            });
+        }
+    }
+
+    Ok(patterns)
 }
 
 fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, String> {
@@ -208,6 +277,10 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
         .map_err(|error| error.to_string())?;
 
     let phase = phase_snapshot_for_today(&starts, &completed_durations, latest_record, today);
+    let symptom_patterns = match &phase {
+        Some(phase) => symptom_patterns_for_cycle_day(repository, &starts, phase.cycle_day)?,
+        None => Vec::new(),
+    };
 
     let bleeding_prompt = bleeding_prompt_for_today(latest_record, &completed_durations, today);
 
@@ -235,6 +308,7 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
             .map(|date| date.format("%Y-%m-%d").to_string())
             .collect(),
         phase,
+        symptom_patterns,
         bleeding_prompt,
     })
 }
@@ -300,12 +374,22 @@ fn report_bleeding_status(
     period_start: String,
     date: String,
     still_bleeding: bool,
+    last_bleeding_date: Option<String>,
     backend: State<'_, BackendState>,
 ) -> Result<DashboardSnapshot, String> {
     let start = NaiveDate::parse_from_str(&period_start, "%Y-%m-%d")
         .map_err(|_| "The period start date is invalid.".to_string())?;
     let observation_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
         .map_err(|_| "The bleeding check date is invalid.".to_string())?;
+    let parsed_last_bleeding_date = last_bleeding_date
+        .filter(|value| !value.is_empty())
+        .map(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d"))
+        .transpose()
+        .map_err(|_| "Choose a valid last bleeding date.".to_string())?;
+    if !still_bleeding && parsed_last_bleeding_date.is_none() {
+        return Err("Select the last day you were bleeding.".to_string());
+    }
+
     let today = Local::now().date_naive();
 
     if observation_date != today {
@@ -328,7 +412,7 @@ fn report_bleeding_status(
     }
 
     repository
-        .report_bleeding_status(start, observation_date, still_bleeding)
+        .report_bleeding_status(start, observation_date, still_bleeding, parsed_last_bleeding_date)
         .map_err(|error| error.to_string())?;
 
     dashboard_snapshot(&repository)
