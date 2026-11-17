@@ -39,7 +39,7 @@
   {#if snapshot.phase && snapshot.symptomPatterns.length > 0}
     <section class="surface-card history-card" aria-label="Symptom patterns for the current cycle day">
       <p class="eyebrow">SYMPTOM PATTERNS · CYCLE DAY {snapshot.phase.cycleDay}</p>
-      <p class="section-description">Likelihood based on your saved check-ins from the same cycle day in previous recorded cycles.</p>
+      <p class="section-description">Likelihood based on your saved check-ins recorded on this cycle day across your tracked history.</p>
       <div class="recorded-dates">
         {#each snapshot.symptomPatterns as pattern (pattern.code)}
           <div class="recorded-date">
