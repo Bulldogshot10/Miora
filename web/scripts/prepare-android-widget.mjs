@@ -102,27 +102,42 @@ await writeFile(providerPath, providerSource.replace("package __PACKAGE__", "pac
 
 
 const bindingsOutput = resolve(webDir, ".uniffi-generated");
+const cargoManifest = resolve(webDir, "src-tauri/Cargo.toml");
+const cargoWorkingDir = resolve(webDir, "src-tauri");
+const nativeLibraryName = process.platform === "win32"
+  ? "miora_lib.dll"
+  : process.platform === "darwin"
+    ? "libmiora_lib.dylib"
+    : "libmiora_lib.so";
+const nativeLibrary = resolve(cargoWorkingDir, "target/debug", nativeLibraryName);
+
 await rm(bindingsOutput, { recursive: true, force: true });
 await mkdir(bindingsOutput, { recursive: true });
+
+// Proc-macro interfaces use UniFFI library mode. The embedded metadata is
+// architecture-independent, so a host build can generate the Kotlin bindings
+// later used by the Android build.
+run("cargo", ["build", "--manifest-path", cargoManifest, "--lib"], cargoWorkingDir);
 run(
   "cargo",
   [
     "run",
     "--manifest-path",
-    resolve(webDir, "src-tauri/Cargo.toml"),
+    cargoManifest,
     "--features",
     "uniffi-cli",
     "--bin",
     "uniffi-bindgen",
     "--",
     "generate",
-    "src:miora_lib",
+    "--library",
+    nativeLibrary,
     "--language",
     "kotlin",
     "--out-dir",
     bindingsOutput,
   ],
-  resolve(webDir, "src-tauri"),
+  cargoWorkingDir,
 );
 const generatedBindings = await copyGeneratedKotlin(bindingsOutput, javaRoot);
 await rm(bindingsOutput, { recursive: true, force: true });
