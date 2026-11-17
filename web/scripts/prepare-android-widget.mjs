@@ -49,6 +49,12 @@ manifest = manifest.slice(0, applicationStart) + applicationTag + manifest.slice
 // A release build has no Android INTERNET permission at all. The tools marker
 // removes it from the merged manifest, including transitive library manifests.
 if (releaseBuild) {
+  // Remove Tauri's direct INTERNET permission declaration. Keep a manifest
+  // merger removal marker so no transitive Android library can re-add it.
+  manifest = manifest.replace(
+    /^\\s*<uses-permission android:name="android\\.permission\\.INTERNET"\\s*\\/>\\s*$/gm,
+    "",
+  );
   if (!manifest.includes('android:name="android.permission.INTERNET" tools:node="remove"')) {
     if (!manifest.includes('xmlns:tools=')) {
       manifest = manifest.replace(
@@ -60,6 +66,15 @@ if (releaseBuild) {
       "</manifest>",
       '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>',
     );
+  }
+  const unmarkedInternetPermission = manifest
+    .split("\\n")
+    .some((line) =>
+      line.includes('android:name="android.permission.INTERNET"') &&
+      !line.includes('tools:node="remove"'),
+    );
+  if (unmarkedInternetPermission) {
+    throw new Error("Release manifest still declares an active INTERNET permission.");
   }
 }
 const receiverDeclarations = [];
