@@ -49,7 +49,7 @@ manifest = manifest.slice(0, applicationStart) + applicationTag + manifest.slice
 // A release build has no Android INTERNET permission at all. The tools marker
 // removes it from the merged manifest, including transitive library manifests.
 if (releaseBuild) {
-      '    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />\n</manifest>',
+  if (!manifest.includes('android:name="android.permission.INTERNET" tools:node="remove"')) {
     if (!manifest.includes('xmlns:tools=')) {
       manifest = manifest.replace(
         "<manifest",
@@ -62,7 +62,6 @@ if (releaseBuild) {
     );
   }
 }
-
 const receiverDeclarations = [];
 if (!manifest.includes('android:name="' + receiverName + '"')) {
   receiverDeclarations.push([
