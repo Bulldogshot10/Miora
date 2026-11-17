@@ -219,6 +219,59 @@ fn database_is_encrypted_and_rejects_an_incorrect_key() {
     let _ = std::fs::remove_file(std::path::PathBuf::from(shm));
 }
 
+#[test]
+fn sqlcipher_migration_preserves_schema_user_version() {
+    let path = temporary_database_path();
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE periods (
+                    id INTEGER PRIMARY KEY,
+                    start_date TEXT NOT NULL UNIQUE,
+                    end_date TEXT,
+                    flow_intensity INTEGER CHECK (flow_intensity BETWEEN 1 AND 3),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_bleeding_observation TEXT,
+                    bleeding_end_confirmed INTEGER NOT NULL DEFAULT 0
+                        CHECK (bleeding_end_confirmed IN (0, 1))
+                );
+                INSERT INTO periods (start_date) VALUES ('2026-11-01');
+                PRAGMA user_version = 2;
+                ",
+            )
+            .unwrap();
+    }
+
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    assert_eq!(
+        repository.period_start_dates().unwrap(),
+        vec![date(2026, 11, 1)]
+    );
+    drop(repository);
+
+    let connection = Connection::open(&path).unwrap();
+    let test_key_hex = "a5".repeat(32);
+    connection
+        .execute_batch(&format!(r#"PRAGMA key = "x'{test_key_hex}'";"#))
+        .unwrap();
+    let user_version: i32 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(user_version, 2);
+    drop(connection);
+
+    let _ = std::fs::remove_file(&path);
+    let mut wal = path.as_os_str().to_os_string();
+    wal.push("-wal");
+    let _ = std::fs::remove_file(std::path::PathBuf::from(wal));
+    let mut shm = path.as_os_str().to_os_string();
+    shm.push("-shm");
+    let _ = std::fs::remove_file(std::path::PathBuf::from(shm));
+}
+
+#[test]
 fn migration_imports_legacy_period_starts() {
     let path = temporary_database_path();
     {
