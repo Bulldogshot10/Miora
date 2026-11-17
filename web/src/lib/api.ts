@@ -5,6 +5,7 @@ import type {
   DashboardSnapshot,
   DailyCheckinInput,
   PhaseProbabilities,
+  SymptomPatternSnapshot,
 } from "./types";
 import { EMPTY_SNAPSHOT } from "./types";
 
@@ -25,7 +26,7 @@ type LocalBleedingState = {
   confirmed: boolean;
 };
 
-const BLEEDING_PRIOR = [0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1];
+const BLEEDING_PRIOR = [0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01];
 const MIN_CYCLE_LENGTH = 21;
 const MAX_CYCLE_LENGTH = 45;
 
@@ -145,21 +146,30 @@ function cycleLengthDistribution(lengths: number[]): Map<number, number> {
 function bleedingDistribution(durations: number[]): Map<number, number> {
   const counts = new Map<number, number>();
   for (const duration of durations) {
-    if (duration >= 2 && duration <= 10) {
+    if (duration >= 1 && duration <= 14) {
       counts.set(duration, (counts.get(duration) ?? 0) + 1);
     }
   }
 
   const denominator =
-    durations.filter((duration) => duration >= 2 && duration <= 10).length +
+    durations.filter((duration) => duration >= 1 && duration <= 14).length +
     BLEEDING_PRIOR.reduce((sum, weight) => sum + weight, 0);
   const distribution = new Map<number, number>();
 
-  for (let day = 2; day <= 10; day += 1) {
-    const prior = BLEEDING_PRIOR[day - 2];
+  for (let day = 1; day <= 14; day += 1) {
+    const prior = BLEEDING_PRIOR[day - 1];
     distribution.set(day, ((counts.get(day) ?? 0) + prior) / denominator);
   }
   return distribution;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
 }
 
 function medianOfDistribution(distribution: Map<number, number>): number {
@@ -190,7 +200,7 @@ function makePhaseEstimate(
 
   const cycleDistribution = cycleLengthDistribution(intervals);
   const bleedDistribution = confirmedCurrentBleedingDays !== null
-    ? new Map([[Math.max(1, Math.min(10, confirmedCurrentBleedingDays)), 1]])
+    ? new Map([[Math.max(1, Math.min(14, confirmedCurrentBleedingDays)), 1]])
     : bleedingDistribution(bleedingDurations);
 
   if (observedBleedingThroughDay !== null && cycleDay <= observedBleedingThroughDay) {
@@ -202,8 +212,10 @@ function makePhaseEstimate(
       completedIntervalsUsed: intervals.length,
       completedBleedingDurationsUsed: bleedingDurations.length,
       confidence: 1,
-      probabilities: { menstrual: 1, follicular: 0, ovulationWindow: 0, luteal: 0 },
-      isPersonalized: confirmedCurrentBleedingDays !== null,
+      probabilities: { menstrual: 1, follicular: 0, ovulationWindow: 0, luteal: 0, uncertain: 0 },
+      isPersonalized: intervals.length > 0 || confirmedCurrentBleedingDays !== null || bleedingDurations.length > 0,
+      cycleHistoryAvailable: intervals.length > 0,
+      bleedingHistoryAvailable: confirmedCurrentBleedingDays !== null || bleedingDurations.length > 0,
       description: "Bleeding has been confirmed for this date.",
     };
   }
@@ -213,6 +225,7 @@ function makePhaseEstimate(
     follicular: 0,
     ovulationWindow: 0,
     luteal: 0,
+    uncertain: 0,
   };
 
   for (const [cycleLength, cycleWeight] of cycleDistribution) {
@@ -221,7 +234,9 @@ function makePhaseEstimate(
         const weight = cycleWeight * bleedingWeight * 0.2;
         const ovulationDay = Math.max(1, cycleLength - lutealDays);
 
-        if (cycleDay <= bleedingDays) {
+        if (cycleDay > cycleLength) {
+          probabilities.uncertain += weight;
+        } else if (cycleDay <= bleedingDays) {
           probabilities.menstrual += weight;
         } else if (cycleDay + 1 < ovulationDay) {
           probabilities.follicular += weight;
@@ -240,6 +255,7 @@ function makePhaseEstimate(
     probabilities.follicular /= total;
     probabilities.ovulationWindow /= total;
     probabilities.luteal /= total;
+    probabilities.uncertain /= total;
   }
 
   const candidates: [keyof PhaseProbabilities, number, CyclePhaseSnapshot["code"], string, string][] = [
@@ -247,6 +263,7 @@ function makePhaseEstimate(
     ["follicular", probabilities.follicular, "follicular", "Follicular phase", "The model estimates that this day is most likely in the follicular phase, before ovulation."],
     ["ovulationWindow", probabilities.ovulationWindow, "ovulation_window", "Estimated ovulation window", "The model estimates that this day is most likely near ovulation. Calendar history cannot confirm ovulation itself."],
     ["luteal", probabilities.luteal, "luteal", "Luteal phase", "The model estimates that this day is most likely in the luteal phase, after ovulation."],
+    ["uncertain", probabilities.uncertain, "uncertain", "Cycle timing uncertain", "The current cycle day is beyond the lengths represented by the model. More recent period observations are needed to estimate the phase."],
   ];
   const mostLikely = candidates.reduce((best, candidate) => candidate[1] > best[1] ? candidate : best);
   const confidence = mostLikely[1];
@@ -257,18 +274,56 @@ function makePhaseEstimate(
 
   return {
     code: learning ? "learning" : mostLikely[2],
-    label: learning ? "Still learning her cycle" : mostLikely[3],
+    label: learning ? "Still learning your cycle" : mostLikely[3],
     cycleDay,
     estimatedCycleLength: Math.round(expectedCycleLength),
     completedIntervalsUsed: intervals.length,
     completedBleedingDurationsUsed: bleedingDurations.length,
     confidence,
     probabilities,
-    isPersonalized: intervals.length > 0 && bleedingDurations.length > 0,
+    isPersonalized: intervals.length > 0 || confirmedCurrentBleedingDays !== null || bleedingDurations.length > 0,
+    cycleHistoryAvailable: intervals.length > 0,
+    bleedingHistoryAvailable: confirmedCurrentBleedingDays !== null || bleedingDurations.length > 0,
     description: learning
       ? "The phase probabilities are still spread across several possibilities. More confirmed cycle and bleeding observations will improve the estimate."
       : mostLikely[4],
   };
+}
+
+
+function buildSymptomPatterns(
+  checkins: DailyCheckinInput[],
+  periodStarts: string[],
+  targetCycleDay: number,
+): SymptomPatternSnapshot[] {
+  const codes = [
+    ["cramps", "Cramps"],
+    ["bloating", "Bloating"],
+    ["headache", "Headache"],
+    ["fatigue", "Fatigue"],
+    ["mood_changes", "Mood changes"],
+  ] as const;
+
+  return codes.flatMap(([code, label]) => {
+    const observations = checkins.flatMap((checkin) => {
+      const start = periodStarts.filter((date) => date <= checkin.date).at(-1);
+      if (!start) return [];
+      const cycleDay = localDayDifference(start, checkin.date) + 1;
+      if (cycleDay !== targetCycleDay) return [];
+      return [{
+        occurred: checkin.symptoms.some((symptom) => symptom.code === code),
+      }];
+    });
+
+    if (observations.length === 0) return [];
+    const positive = observations.filter((entry) => entry.occurred).length;
+    return [{
+      code,
+      label,
+      probability: (positive + 1) / (observations.length + 2),
+      observationsUsed: observations.length,
+    }];
+  });
 }
 
 function browserSnapshot(): DashboardSnapshot {
@@ -294,9 +349,9 @@ function browserSnapshot(): DashboardSnapshot {
 
   if (latest && lengths.length >= 2 && averageCycleLength !== null) {
     const sorted = [...lengths].sort((a, b) => a - b);
-    const center = sorted[Math.floor(sorted.length / 2)];
-    const deviations = sorted.map((length) => Math.abs(length - center)).sort((a, b) => a - b);
-    const mad = deviations[Math.floor(deviations.length / 2)] ?? 0;
+    const center = median(sorted) ?? 0;
+    const deviations = sorted.map((length) => Math.abs(length - center));
+    const mad = median(deviations) ?? 0;
     const radius = Math.max(1, Math.ceil(mad * 1.4826));
     expectedNextPeriodStart = addLocalDays(latest, Math.round(center));
     earliestNextPeriodStart = addLocalDays(latest, Math.max(1, Math.round(center) - radius));
@@ -329,6 +384,9 @@ function browserSnapshot(): DashboardSnapshot {
     confirmedCurrentDuration,
     observedThroughDay,
   );
+  const symptomPatterns: SymptomPatternSnapshot[] = phase
+    ? buildSymptomPatterns(checkins, periodStarts, phase.cycleDay)
+    : [];
 
   let bleedingPrompt: BleedingPrompt | null = null;
   const latestEndAlreadyConfirmed =
@@ -363,6 +421,7 @@ function browserSnapshot(): DashboardSnapshot {
     periodStarts,
     checkinDates: [...new Set(checkins.map((entry) => entry.date))].sort(),
     phase,
+    symptomPatterns,
     bleedingPrompt,
   };
 }
@@ -406,12 +465,14 @@ export async function reportBleedingStatus(
   periodStart: string,
   date: string,
   stillBleeding: boolean,
+  lastBleedingDate: string | null,
 ): Promise<DashboardSnapshot> {
   if (runningInTauri()) {
     return invoke<DashboardSnapshot>("report_bleeding_status", {
       periodStart,
       date,
       stillBleeding,
+      lastBleedingDate,
     });
   }
 
@@ -434,13 +495,22 @@ export async function reportBleedingStatus(
     };
     ends[periodStart] = today;
   } else {
-    const lastBleedingDay = existing.lastObservation ?? addLocalDays(today, -1);
+    if (!lastBleedingDate) {
+      throw new Error("Select the last day you were bleeding.");
+    }
+    if (lastBleedingDate < periodStart || lastBleedingDate > date) {
+      throw new Error("The last bleeding day must be between the period start and today's check.");
+    }
+    const nextStart = readStoredDates().find((start) => start > periodStart);
+    if (nextStart && lastBleedingDate >= nextStart) {
+      throw new Error("The last bleeding day must be before the next recorded period start.");
+    }
     states[periodStart] = {
-      lastObservation: existing.lastObservation,
-      endDate: lastBleedingDay,
+      lastObservation: lastBleedingDate,
+      endDate: lastBleedingDate,
       confirmed: true,
     };
-    ends[periodStart] = lastBleedingDay;
+    ends[periodStart] = lastBleedingDate;
   }
 
   localStorage.setItem(BLEEDING_STATE_KEY, JSON.stringify(states));
