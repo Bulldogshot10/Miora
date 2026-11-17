@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 use miora::domain::symptom::{Severity, SymptomCode, SymptomEntry};
 use miora::storage::repository::Repository;
 use rusqlite::Connection;
 
 fn date(year: i32, month: u32, day: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    NaiveDate::new(year as i16, month as i8, day as i8).unwrap()
 }
 
 fn temporary_database_path() -> PathBuf {
@@ -21,7 +21,7 @@ fn temporary_database_path() -> PathBuf {
 #[test]
 fn bleeding_completion_uses_the_explicit_last_day() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let start = date(2026, 11, 1);
 
     repository.add_period_start(start).unwrap();
@@ -38,7 +38,7 @@ fn bleeding_completion_uses_the_explicit_last_day() {
 #[test]
 fn bleeding_completion_cannot_precede_a_positive_observation() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let start = date(2026, 11, 1);
 
     repository.add_period_start(start).unwrap();
@@ -63,7 +63,7 @@ fn bleeding_completion_cannot_precede_a_positive_observation() {
 #[test]
 fn bleeding_completion_requires_an_explicit_last_day() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let start = date(2026, 11, 1);
 
     repository.add_period_start(start).unwrap();
@@ -86,7 +86,7 @@ fn bleeding_completion_requires_an_explicit_last_day() {
 #[test]
 fn new_period_start_cannot_overlap_previous_bleeding() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let first_start = date(2026, 11, 1);
 
     repository.add_period_start(first_start).unwrap();
@@ -103,7 +103,7 @@ fn new_period_start_cannot_overlap_previous_bleeding() {
 #[test]
 fn period_end_cannot_backdate_before_a_prior_bleeding_observation() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let start = date(2026, 11, 1);
 
     repository.add_period_start(start).unwrap();
@@ -122,7 +122,7 @@ fn period_end_cannot_backdate_before_a_prior_bleeding_observation() {
 #[test]
 fn period_end_must_precede_the_next_period_start() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let first_start = date(2026, 11, 1);
 
     repository.add_period_start(first_start).unwrap();
@@ -141,7 +141,7 @@ fn period_end_must_precede_the_next_period_start() {
 #[test]
 fn daily_checkin_query_includes_days_without_symptoms() {
     let path = temporary_database_path();
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     let first_day = date(2026, 11, 1);
     let second_day = date(2026, 11, 2);
     let cramps = [SymptomEntry {
@@ -184,7 +184,7 @@ fn migration_imports_legacy_period_starts() {
             .unwrap();
     }
 
-    let repository = Repository::open(&path).unwrap();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
     assert_eq!(
         repository.period_start_dates().unwrap(),
         vec![date(2026, 11, 1)]
