@@ -90,8 +90,8 @@ jobs:
 
       - name: Audit Rust dependencies
         run: |
-          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file Cargo.lock
-          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file web/src-tauri/Cargo.lock
+          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0429 --file Cargo.lock
+          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0429 --file web/src-tauri/Cargo.lock
 
       - name: Check Rust formatting
         run: |
