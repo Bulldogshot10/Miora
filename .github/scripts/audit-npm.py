@@ -91,7 +91,12 @@ def main() -> int:
             allowed = allowed and version_at_or_below_4_0_7(picomatch.get("version"))
         elif name == "fdir":
             allowed = allowed and any(
-                isinstance(item, str) and item == "picomatch"
+                item == "picomatch"
+                or (
+                    isinstance(item, dict)
+                    and item.get("name") == "picomatch"
+                    and item.get("url") == ADVISORY_URL
+                )
                 for item in vulnerability.get("via", [])
             )
 
