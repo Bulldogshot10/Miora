@@ -63,9 +63,8 @@ pub fn run(database_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if let Err(error) = refresh_dashboard(&window, &database_handle) {
-                window.set_status_message(
-                    format!("Could not refresh the dashboard: {error}").into(),
-                );
+                window
+                    .set_status_message(format!("Could not refresh the dashboard: {error}").into());
             }
         }
     });
