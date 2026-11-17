@@ -1,8 +1,8 @@
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 use miora::domain::cycle::{cycle_day, cycle_length_days};
 
 fn date(year: i32, month: u32, day: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    NaiveDate::new(year as i16, month as i8, day as i8).unwrap()
 }
 
 #[test]
