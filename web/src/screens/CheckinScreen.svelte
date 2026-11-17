@@ -16,6 +16,7 @@
   let loadingDate = false;
   let hasExistingCheckin = false;
   let hasUnsavedChanges = false;
+  let loadError = false;
   let dateMessage = "";
   let loadSequence = 0;
   let submitState: "idle" | "success" | "error" = "idle";
@@ -57,6 +58,7 @@
 
   async function loadSelectedDate() {
     hasUnsavedChanges = false;
+    loadError = false;
     const sequence = ++loadSequence;
     loadingDate = true;
     submitState = "idle";
@@ -84,8 +86,13 @@
       }
     } catch (error) {
       if (sequence !== loadSequence) return;
-      dateMessage = error instanceof Error ? error.message : String(error);
+      moodScore = 3;
+      energyScore = 3;
+      selectedSymptoms = {};
       hasExistingCheckin = false;
+      hasUnsavedChanges = false;
+      loadError = true;
+      dateMessage = error instanceof Error ? error.message : String(error);
     } finally {
       if (sequence === loadSequence) loadingDate = false;
     }
@@ -124,7 +131,7 @@
   }
 
   async function submit() {
-    if (busy || loadingDate || !selectedDate) return;
+    if (busy || loadingDate || loadError || !selectedDate) return;
 
     const entries: SymptomInput[] = Object.entries(selectedSymptoms).map(([code, severity]) => ({
       code,
@@ -177,13 +184,18 @@
       onchange={handleDateChange}
       disabled={busy}
     />
-    <p class="date-record-message" class:date-record-saved={hasExistingCheckin}>
+    <p class="date-record-message" class:date-record-saved={hasExistingCheckin} role={loadError ? "alert" : "status"}>
       {#if loadingDate}
         Loading saved check-in…
       {:else}
         {dateMessage}
       {/if}
     </p>
+    {#if loadError}
+      <button class="button button-secondary button-full" type="button" onclick={loadSelectedDate}>
+        Retry loading this date
+      </button>
+    {/if}
   </section>
 
   <section class="surface-card checkin-card">
@@ -201,7 +213,7 @@
           class:selected={moodScore === mood.score}
           type="button"
           aria-pressed={moodScore === mood.score}
-          disabled={loadingDate || busy}
+          disabled={loadingDate || busy || loadError}
           onclick={() => {
             moodScore = mood.score;
             hasUnsavedChanges = true;
@@ -232,7 +244,7 @@
       step="1"
       bind:value={energyScore}
       oninput={() => { hasUnsavedChanges = true; clearFeedback(); }}
-      disabled={loadingDate || busy}
+      disabled={loadingDate || busy || loadError}
       aria-label="Energy level from 1 to 5"
     />
     <div class="range-labels"><span>Very low</span><span>Very high</span></div>
@@ -254,7 +266,7 @@
             type="button"
             class="symptom-toggle"
             aria-pressed={symptom.code in selectedSymptoms}
-            disabled={loadingDate || busy}
+            disabled={loadingDate || busy || loadError}
             onclick={() => toggleSymptom(symptom.code)}
           >
             <span class="symptom-check">{#if symptom.code in selectedSymptoms}<Check size={14} />{/if}</span>
@@ -272,7 +284,7 @@
                     class:active={selectedSymptoms[symptom.code] === severity.value}
                     type="button"
                     aria-pressed={selectedSymptoms[symptom.code] === severity.value}
-                    disabled={loadingDate || busy}
+                    disabled={loadingDate || busy || loadError}
                     onclick={() => setSeverity(symptom.code, severity.value)}
                   >
                     {severity.label}
@@ -328,7 +340,7 @@
   <button
     class="button button-primary button-full save-checkin"
     type="button"
-    disabled={busy || loadingDate || !selectedDate}
+    disabled={busy || loadingDate || loadError || !selectedDate}
     aria-busy={busy}
     onclick={submit}
   >
