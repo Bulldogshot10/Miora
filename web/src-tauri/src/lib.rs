@@ -9,7 +9,7 @@ use miora::engine::{
     cycle_estimator::estimate_next_period,
     cycle_phase::{estimate_bleeding_duration, estimate_cycle_phase},
     statistics::mean,
-    symptom_model::{SymptomObservation, probability_on_cycle_day},
+    symptom_model::{probability_on_cycle_day, SymptomObservation},
 };
 use miora::storage::repository::{PeriodBleedingRecord, Repository};
 use serde::{Deserialize, Serialize};
@@ -199,7 +199,6 @@ fn phase_snapshot_for_today(
     })
 }
 
-
 fn symptom_patterns_for_cycle_day(
     repository: &Repository,
     starts: &[NaiveDate],
@@ -360,8 +359,13 @@ fn log_period_start(
         let starts = repository
             .period_start_dates()
             .map_err(|error| error.to_string())?;
-        if starts.iter().any(|next_start| *next_start > parsed_start && end >= *next_start) {
-            return Err("The last bleeding day must be before the next recorded period start.".to_string());
+        if starts
+            .iter()
+            .any(|next_start| *next_start > parsed_start && end >= *next_start)
+        {
+            return Err(
+                "The last bleeding day must be before the next recorded period start.".to_string(),
+            );
         }
     }
 
@@ -421,7 +425,12 @@ fn report_bleeding_status(
     }
 
     repository
-        .report_bleeding_status(start, observation_date, still_bleeding, parsed_last_bleeding_date)
+        .report_bleeding_status(
+            start,
+            observation_date,
+            still_bleeding,
+            parsed_last_bleeding_date,
+        )
         .map_err(|error| error.to_string())?;
 
     dashboard_snapshot(&repository)
@@ -542,11 +551,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("miora-symptoms-{nonce}.sqlite3"));
         let repository = Repository::open(&path).unwrap();
 
-        let starts = [
-            date(2026, 1, 1),
-            date(2026, 1, 29),
-            date(2026, 2, 26),
-        ];
+        let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
         for start in starts {
             repository.add_period_start(start).unwrap();
         }
@@ -555,12 +560,21 @@ mod tests {
             code: SymptomCode::Cramps,
             severity: Severity::Moderate,
         }];
-        repository.save_daily_checkin(date(2026, 1, 3), 3, 3, &cramps).unwrap();
-        repository.save_daily_checkin(date(2026, 1, 31), 3, 3, &[]).unwrap();
-        repository.save_daily_checkin(date(2026, 2, 28), 3, 3, &cramps).unwrap();
+        repository
+            .save_daily_checkin(date(2026, 1, 3), 3, 3, &cramps)
+            .unwrap();
+        repository
+            .save_daily_checkin(date(2026, 1, 31), 3, 3, &[])
+            .unwrap();
+        repository
+            .save_daily_checkin(date(2026, 2, 28), 3, 3, &cramps)
+            .unwrap();
 
         let patterns = symptom_patterns_for_cycle_day(&repository, &starts, 3).unwrap();
-        let cramps_pattern = patterns.iter().find(|pattern| pattern.code == "cramps").unwrap();
+        let cramps_pattern = patterns
+            .iter()
+            .find(|pattern| pattern.code == "cramps")
+            .unwrap();
 
         assert_eq!(cramps_pattern.observations_used, 3);
         assert!((cramps_pattern.probability - 0.6).abs() < 1e-9);
