@@ -52,8 +52,7 @@ impl CycleLengthPosterior {
 
     pub fn expected_length(&self) -> f64 {
         let total_observations: u32 = self.counts.iter().sum();
-        let denominator =
-            total_observations as f64 + self.prior_per_day * self.counts.len() as f64;
+        let denominator = total_observations as f64 + self.prior_per_day * self.counts.len() as f64;
 
         (self.min_days..=self.max_days)
             .zip(self.counts.iter())

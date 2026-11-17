@@ -39,7 +39,7 @@ export component CalendarScreen inherits Rectangle {
     in property <string> status-message;
 
     callback save-period-start(string);
-    in-out property <string> date-input: "";
+    in-out property <string> date-input <=> period-date-input.text;
 
     background: #FAF7F8;
 
@@ -196,7 +196,6 @@ export component CalendarScreen inherits Rectangle {
                         vertical-alignment: center;
                     }
 
-                    root.date-input <=> period-date-input.text;
                 }
 
                 Rectangle {
