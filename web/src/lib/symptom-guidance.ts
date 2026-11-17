@@ -13,7 +13,7 @@ export const symptomGuidance: Record<string, SymptomGuidance> = {
     actions: [
       "Place a heat pad or hot-water bottle wrapped in a towel on the lower abdomen, or try a warm bath or shower.",
       "Try gentle movement such as walking, swimming or yoga if it feels comfortable.",
-      "Ibuprofen and other anti-inflammatory pain relievers can help period pain. Follow the product label and ask a pharmacist or clinician whether an anti-inflammatory is suitable for her health history and other medicines.",
+      "Ibuprofen and other anti-inflammatory pain relievers can help period pain. Follow the product label and ask a pharmacist or clinician whether an anti-inflammatory is suitable for your health history and other medicines.",
     ],
     seekCare: "Get medical advice if pain is severe or worse than usual, painkillers do not help, periods become heavier or irregular, or pain affects sex, urination or bowel movements.",
     sources: [
@@ -25,7 +25,7 @@ export const symptomGuidance: Record<string, SymptomGuidance> = {
     title: "Bloating",
     summary: "Bloating can occur around a period. Digestive gas, constipation and food triggers can also contribute.",
     actions: [
-      "Drink water and keep up gentle regular movement; a walk can help when she feels bloated.",
+      "Drink water and keep up gentle regular movement; a walk can help when you feel bloated.",
       "Try smaller, more frequent meals rather than large meals.",
       "Notice whether fizzy drinks, excess caffeine or particular foods make it worse, and reduce personal triggers.",
       "If constipation is present, fibre-containing foods such as oats may help. A pharmacist can explain whether an option such as simeticone is appropriate for trapped wind.",
@@ -42,8 +42,8 @@ export const symptomGuidance: Record<string, SymptomGuidance> = {
     actions: [
       "Drink water, eat regular meals and avoid skipping meals.",
       "Rest, relax and take breaks from prolonged screen use if it aggravates the headache.",
-      "If she has migraine-like symptoms, resting in a dark, quiet room may help.",
-      "Paracetamol or ibuprofen can help some headaches. Follow the product label and ask a pharmacist if she is unsure which medicine is suitable.",
+      "If you have migraine-like symptoms, resting in a dark, quiet room may help.",
+      "Paracetamol or ibuprofen can help some headaches. Follow the product label and ask a pharmacist if you are unsure which medicine is suitable.",
       "Record when the headache starts, how long it lasts and whether it occurs near the period; bring the pattern to a clinician if it recurs.",
     ],
     seekCare: "Seek urgent help for a sudden, extremely painful headache, weakness or numbness, trouble speaking or walking, confusion, seizure or loss of vision. Speak with a clinician about headaches that recur, worsen or are difficult to control.",
@@ -57,7 +57,7 @@ export const symptomGuidance: Record<string, SymptomGuidance> = {
     summary: "Tiredness and sleep changes are recognised premenstrual symptoms, but fatigue can also have causes unrelated to the menstrual cycle.",
     actions: [
       "Keep a regular sleep and wake schedule, including on weekends.",
-      "Use gentle, regular aerobic activity such as walking, cycling or swimming; scale it to how she feels.",
+      "Use gentle, regular aerobic activity such as walking, cycling or swimming; scale it to how you feel.",
       "Eat regular, balanced meals. If large meals feel uncomfortable, smaller meals more often may be easier.",
       "Track fatigue alongside period dates, sleep and bleeding so a clinician can see whether a pattern repeats.",
     ],
@@ -72,11 +72,11 @@ export const symptomGuidance: Record<string, SymptomGuidance> = {
     summary: "Irritability, anxiety, low mood and mood swings can occur before a period. Repeated daily tracking helps show whether symptoms follow a cycle-related pattern.",
     actions: [
       "Protect a consistent sleep routine and include regular physical activity where possible.",
-      "Try a stress-management practice she finds comfortable, such as breathing exercises, yoga or meditation.",
+      "Try a stress-management practice you find comfortable, such as breathing exercises, yoga or meditation.",
       "Record mood and symptom severity every day across at least two or three months, along with period dates.",
       "Cognitive behavioural therapy (CBT) is an evidence-supported treatment option for PMS. A clinician can discuss this and other treatments if symptoms are disruptive.",
     ],
-    seekCare: "Talk with a clinician if mood symptoms repeatedly interfere with daily life or relationships. If she feels at risk of harming herself or cannot stay safe, seek urgent local mental-health or emergency support.",
+    seekCare: "Talk with a clinician if mood symptoms repeatedly interfere with daily life or relationships. If you feel at risk of harming yourself or cannot stay safe, seek urgent local mental-health or emergency support.",
     sources: [
       { label: "RCOG · Managing PMS", url: "https://www.rcog.org.uk/for-the-public/browse-our-patient-information/managing-premenstrual-syndrome-pms/" },
       { label: "ACOG · Premenstrual Syndrome", url: "https://www.acog.org/womens-health/faqs/premenstrual-syndrome" },
