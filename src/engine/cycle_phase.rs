@@ -242,10 +242,10 @@ pub fn estimate_cycle_phase(
             for luteal_days in MIN_LUTEAL_LENGTH..=MAX_LUTEAL_LENGTH {
                 let weight = cycle_weight * bleeding_weight * luteal_weight;
                 let ovulation_day = cycle_length.saturating_sub(luteal_days).max(1);
-                let phase = if cycle_day > *cycle_length {
-                    CyclePhase::Uncertain
-                } else if cycle_day <= *bleeding_days {
+                let phase = if cycle_day <= *bleeding_days {
                     CyclePhase::Menstrual
+                } else if cycle_day > *cycle_length {
+                    CyclePhase::Uncertain
                 } else if cycle_day + 1 < ovulation_day {
                     CyclePhase::Follicular
                 } else if cycle_day <= ovulation_day + 1 {
@@ -429,8 +429,9 @@ mod tests {
     fn confirmed_bleeding_duration_over_ten_days_is_not_clamped() {
         let start = date(2026, 1, 1);
         let estimate =
-            estimate_cycle_phase(&[start], &[], date(2026, 1, 12), Some(12), None).unwrap();
+            estimate_cycle_phase(&[start], &[], date(2026, 2, 15), Some(50), None).unwrap();
 
+        assert_eq!(estimate.cycle_day, 46);
         assert_eq!(estimate.phase, CyclePhase::Menstrual);
         assert!((estimate.probabilities.menstrual - 1.0).abs() < 1e-9);
     }
