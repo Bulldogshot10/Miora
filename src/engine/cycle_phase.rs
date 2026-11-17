@@ -42,11 +42,21 @@ impl CyclePhase {
 
     pub const fn description(self) -> &'static str {
         match self {
-            Self::Menstrual => "Bleeding observations and recorded period dates place this day in the menstrual phase.",
-            Self::Follicular => "The model estimates that this day is most likely in the follicular phase, before ovulation.",
-            Self::OvulationWindow => "The model estimates that this day is most likely near ovulation. Calendar history cannot confirm ovulation itself.",
-            Self::Luteal => "The model estimates that this day is most likely in the luteal phase, after ovulation.",
-            Self::Learning => "The phase probabilities are still spread across multiple possibilities. More confirmed period dates and bleeding observations will improve the estimate.",
+            Self::Menstrual => {
+                "Bleeding observations and recorded period dates place this day in the menstrual phase."
+            }
+            Self::Follicular => {
+                "The model estimates that this day is most likely in the follicular phase, before ovulation."
+            }
+            Self::OvulationWindow => {
+                "The model estimates that this day is most likely near ovulation. Calendar history cannot confirm ovulation itself."
+            }
+            Self::Luteal => {
+                "The model estimates that this day is most likely in the luteal phase, after ovulation."
+            }
+            Self::Learning => {
+                "The phase probabilities are still spread across multiple possibilities. More confirmed period dates and bleeding observations will improve the estimate."
+            }
         }
     }
 }
@@ -141,9 +151,7 @@ impl BleedingDurationPosterior {
     }
 }
 
-pub fn estimate_bleeding_duration(
-    completed_durations: &[u32],
-) -> BleedingDurationPosterior {
+pub fn estimate_bleeding_duration(completed_durations: &[u32]) -> BleedingDurationPosterior {
     let mut posterior = BleedingDurationPosterior::default();
     for duration in completed_durations {
         posterior.observe(*duration);
@@ -190,11 +198,8 @@ pub fn estimate_cycle_phase(
         .filter(|days| (MIN_CYCLE_LENGTH..=MAX_CYCLE_LENGTH).contains(days))
         .collect();
 
-    let mut cycle_posterior = CycleLengthPosterior::with_prior(
-        MIN_CYCLE_LENGTH,
-        MAX_CYCLE_LENGTH,
-        0.2,
-    );
+    let mut cycle_posterior =
+        CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.2);
     for length in &observed_cycle_lengths {
         cycle_posterior.observe(*length);
     }
@@ -207,8 +212,7 @@ pub fn estimate_cycle_phase(
     };
 
     let cycle_distribution = cycle_posterior.distribution();
-    let luteal_candidate_count =
-        (MAX_LUTEAL_LENGTH - MIN_LUTEAL_LENGTH + 1) as f64;
+    let luteal_candidate_count = (MAX_LUTEAL_LENGTH - MIN_LUTEAL_LENGTH + 1) as f64;
     let luteal_weight = 1.0 / luteal_candidate_count;
 
     let mut probabilities = PhaseProbabilities {
@@ -347,8 +351,8 @@ mod tests {
     #[test]
     fn active_bleeding_observation_overrides_phase_distribution() {
         let start = date(2026, 11, 8);
-        let estimate = estimate_cycle_phase(&[start], &[], date(2026, 11, 13), None, Some(6))
-            .unwrap();
+        let estimate =
+            estimate_cycle_phase(&[start], &[], date(2026, 11, 13), None, Some(6)).unwrap();
 
         assert_eq!(estimate.phase, CyclePhase::Menstrual);
         assert_eq!(estimate.confidence, 1.0);
@@ -357,8 +361,8 @@ mod tests {
     #[test]
     fn personal_cycle_history_produces_phase_distribution() {
         let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
-        let follicular = estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 5), Some(5), None)
-            .unwrap();
+        let follicular =
+            estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 5), Some(5), None).unwrap();
         let ovulation =
             estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 10), Some(5), None).unwrap();
         let luteal =
@@ -373,8 +377,8 @@ mod tests {
     #[test]
     fn phase_probability_is_normalized() {
         let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
-        let estimate = estimate_cycle_phase(&starts, &[4, 6], date(2026, 3, 10), None, None)
-            .unwrap();
+        let estimate =
+            estimate_cycle_phase(&starts, &[4, 6], date(2026, 3, 10), None, None).unwrap();
         let probabilities = estimate.probabilities;
         let sum = probabilities.menstrual
             + probabilities.follicular
@@ -386,6 +390,9 @@ mod tests {
 
     #[test]
     fn date_before_first_period_has_no_phase() {
-        assert!(estimate_cycle_phase(&[date(2026, 11, 8)], &[], date(2026, 11, 7), None, None).is_none());
+        assert!(
+            estimate_cycle_phase(&[date(2026, 11, 8)], &[], date(2026, 11, 7), None, None)
+                .is_none()
+        );
     }
 }
