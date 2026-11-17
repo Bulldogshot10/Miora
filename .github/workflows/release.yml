@@ -85,6 +85,33 @@ jobs:
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
 
+      - name: Set Android release version metadata
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?", tag):
+              raise SystemExit(f"Invalid Android release tag: {tag!r}; expected vMAJOR.MINOR.PATCH[-prerelease].")
+
+          version_code = int(os.environ["RELEASE_VERSION_CODE"])
+          if not 1 <= version_code <= 2_100_000_000:
+              raise SystemExit(f"Android version code is outside the supported range: {version_code}")
+
+          config_path = Path("web/src-tauri/tauri.conf.json")
+          config = json.loads(config_path.read_text())
+          config["version"] = tag[1:]
+          config.setdefault("bundle", {}).setdefault("android", {})["versionCode"] = version_code
+          config_path.write_text(json.dumps(config, indent=2) + "\\n")
+          print(f"Android release version: {config['version']} (versionCode {version_code})")
+          PY
+
       - name: Audit Web dependencies
         run: |
           python3 .github/scripts/audit-npm.py
@@ -169,7 +196,11 @@ jobs:
         run: npm run tauri:android:release --prefix web
 
       - name: Verify release APK signatures
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION_CODE: ${{ github.run_number }}
         run: |
+          expected_version="${RELEASE_TAG#v}"
           mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
           if [ "${#apks[@]}" -eq 0 ]; then
             echo "::error::No release APK was produced."
@@ -177,6 +208,18 @@ jobs:
           fi
           for apk in "${apks[@]}"; do
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          done
+
+          for apk in "${apks[@]}"; do
+            badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")
+            if ! grep -Fq "versionCode='$RELEASE_VERSION_CODE'" <<< "$badging"; then
+              echo "::error::APK versionCode does not match workflow run number $RELEASE_VERSION_CODE."
+              exit 1
+            fi
+            if ! grep -Fq "versionName='$expected_version'" <<< "$badging"; then
+              echo "::error::APK versionName does not match release tag $expected_version."
+              exit 1
+            fi
           done
 
           for apk in "${apks[@]}"; do

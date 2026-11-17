@@ -115,7 +115,7 @@ cargo check --manifest-path web/src-tauri/Cargo.toml --all-targets
 
 GitHub Actions checks Rust formatting, tests and Clippy; checks Svelte/TypeScript; builds the web frontend; and builds an ARM64 Android debug APK.
 
-A tag matching v* triggers a signed Android release. Configure these Actions repository secrets before creating a release tag:
+A tag matching `vMAJOR.MINOR.PATCH` (optionally with a prerelease suffix) triggers a signed Android release. The tag sets the APK version name; the GitHub Actions release workflow run number sets the monotonically increasing Android version code. The release workflow verifies both values in the APK before publishing. Configure these Actions repository secrets before creating a release tag:
 
 - ANDROID_KEY_BASE64: release keystore encoded as Base64.
 - ANDROID_KEY_ALIAS: key alias inside the keystore.
