@@ -36,6 +36,31 @@ fn bleeding_completion_uses_the_explicit_last_day() {
 }
 
 #[test]
+fn bleeding_completion_cannot_precede_a_positive_observation() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path).unwrap();
+    let start = date(2026, 11, 1);
+
+    repository.add_period_start(start).unwrap();
+    repository
+        .report_bleeding_status(start, date(2026, 11, 5), true, None)
+        .unwrap();
+
+    assert!(
+        repository
+            .report_bleeding_status(start, date(2026, 11, 9), false, Some(date(2026, 11, 4)))
+            .is_err()
+    );
+    repository
+        .report_bleeding_status(start, date(2026, 11, 9), false, Some(date(2026, 11, 5)))
+        .unwrap();
+    assert_eq!(repository.confirmed_bleeding_durations().unwrap(), vec![5]);
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn bleeding_completion_requires_an_explicit_last_day() {
     let path = temporary_database_path();
     let repository = Repository::open(&path).unwrap();
