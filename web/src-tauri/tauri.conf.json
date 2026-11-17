@@ -22,7 +22,7 @@
     "security": {
       "devCsp": {
         "default-src": "'self'",
-        "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:5173",
+        "connect-src": "'self' ipc: http://ipc.localhost ws:",
         "img-src": "'self' asset: http://asset.localhost blob: data:",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:"
