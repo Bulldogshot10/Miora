@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn personal_cycle_history_produces_phase_distribution() {
+    fn phase_model_keeps_ovulation_uncertain_with_only_two_intervals() {
         let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
         let follicular =
             estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 5), Some(5), None).unwrap();
@@ -369,7 +369,8 @@ mod tests {
             estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 18), Some(5), None).unwrap();
 
         assert_eq!(follicular.phase, CyclePhase::Follicular);
-        assert_eq!(ovulation.phase, CyclePhase::OvulationWindow);
+        assert_eq!(ovulation.phase, CyclePhase::Learning);
+        assert!(ovulation.probabilities.ovulation_window > 0.45);
         assert_eq!(luteal.phase, CyclePhase::Luteal);
         assert!(ovulation.is_personalized);
     }
