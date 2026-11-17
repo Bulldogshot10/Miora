@@ -180,16 +180,16 @@ pub fn estimate_cycle_phase(
     let current_start = starts[current_start_index];
     let cycle_day = (date - current_start).num_days() as u32 + 1;
 
-    if let Some(observed_day) = observed_bleeding_through_day {
-        if cycle_day <= observed_day {
-            return Some(fixed_menstrual_estimate(
-                cycle_day,
-                confirmed_current_bleeding_days.is_none(),
-                starts.len().saturating_sub(1),
-                completed_bleeding_durations.len(),
-                true,
-            ));
-        }
+    if let Some(observed_day) = observed_bleeding_through_day
+        && cycle_day <= observed_day
+    {
+        return Some(fixed_menstrual_estimate(
+            cycle_day,
+            confirmed_current_bleeding_days.is_none(),
+            starts.len().saturating_sub(1),
+            completed_bleeding_durations.len(),
+            true,
+        ));
     }
 
     let observed_cycle_lengths: Vec<u32> = starts

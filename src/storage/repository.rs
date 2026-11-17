@@ -12,6 +12,13 @@ pub struct PeriodBleedingRecord {
     pub end_confirmed: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct DailyCheckinRecord {
+    pub mood_score: i32,
+    pub energy_score: i32,
+    pub symptoms: Vec<SymptomEntry>,
+}
+
 pub struct Repository {
     database: Database,
 }
@@ -277,7 +284,7 @@ impl Repository {
     pub fn daily_checkin(
         &self,
         date: NaiveDate,
-    ) -> Result<Option<(i32, i32, Vec<SymptomEntry>)>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<DailyCheckinRecord>, Box<dyn std::error::Error>> {
         let date_text = date.format("%Y-%m-%d").to_string();
         let checkin: Option<(i64, i32, i32)> = self
             .database
@@ -315,7 +322,11 @@ impl Repository {
             symptoms.push(SymptomEntry { code, severity });
         }
 
-        Ok(Some((mood_score, energy_score, symptoms)))
+        Ok(Some(DailyCheckinRecord {
+            mood_score,
+            energy_score,
+            symptoms,
+        }))
     }
 
     pub fn daily_checkin_count(&self) -> Result<usize, rusqlite::Error> {

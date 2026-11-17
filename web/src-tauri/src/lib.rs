@@ -347,7 +347,7 @@ fn get_daily_checkin(
         .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
 
-    let Some((mood_score, energy_score, symptoms)) = repository
+    let Some(checkin) = repository
         .daily_checkin(parsed)
         .map_err(|error| error.to_string())?
     else {
@@ -356,9 +356,10 @@ fn get_daily_checkin(
 
     Ok(Some(DailyCheckinInput {
         date,
-        mood_score,
-        energy_score,
-        symptoms: symptoms
+        mood_score: checkin.mood_score,
+        energy_score: checkin.energy_score,
+        symptoms: checkin
+            .symptoms
             .into_iter()
             .map(|entry| SymptomInput {
                 code: entry.code.as_str().to_string(),
