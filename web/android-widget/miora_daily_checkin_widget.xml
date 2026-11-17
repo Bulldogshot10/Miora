@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/miora_widget_panel">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_brand"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="miora"
+            android:textColor="#F4F0FF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#C5C1D7"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:layout_marginBottom="9dp"
+        android:text="No check-in saved yet"
+        android:textColor="#C5C1D7"
+        android:textSize="11sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="MOOD  ·  HOW ARE YOU FEELING?"
+        android:textColor="#D6C8FF"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="9dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/mood_1" style="@style/MioraWidgetChoice" android:text="1" />
+        <TextView android:id="@+id/mood_2" style="@style/MioraWidgetChoice" android:text="2" />
+        <TextView android:id="@+id/mood_3" style="@style/MioraWidgetChoice" android:text="3" />
+        <TextView android:id="@+id/mood_4" style="@style/MioraWidgetChoice" android:text="4" />
+        <TextView android:id="@+id/mood_5" style="@style/MioraWidgetChoice" android:text="5" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ENERGY  ·  HOW MUCH ENERGY?"
+        android:textColor="#D6C8FF"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="9dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/energy_1" style="@style/MioraWidgetChoice" android:text="1" />
+        <TextView android:id="@+id/energy_2" style="@style/MioraWidgetChoice" android:text="2" />
+        <TextView android:id="@+id/energy_3" style="@style/MioraWidgetChoice" android:text="3" />
+        <TextView android:id="@+id/energy_4" style="@style/MioraWidgetChoice" android:text="4" />
+        <TextView android:id="@+id/energy_5" style="@style/MioraWidgetChoice" android:text="5" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="SYMPTOMS  ·  TAP TO CYCLE MILD / MODERATE / SEVERE / OFF"
+        android:textColor="#D6C8FF"
+        android:textSize="9sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:layout_marginTop="5dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/symptom_cramps" style="@style/MioraWidgetChoice" android:text="Cramp" />
+        <TextView android:id="@+id/symptom_bloating" style="@style/MioraWidgetChoice" android:text="Bloat" />
+        <TextView android:id="@+id/symptom_headache" style="@style/MioraWidgetChoice" android:text="Headache" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="9dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/symptom_fatigue" style="@style/MioraWidgetChoice" android:text="Fatigue" />
+        <TextView android:id="@+id/symptom_mood_changes" style="@style/MioraWidgetChoice" android:text="Mood" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_save"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:gravity="center"
+        android:background="@drawable/miora_widget_chip_selected"
+        android:text="Save today's check-in"
+        android:textColor="#231F37"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_open_app"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="Open full check-in"
+        android:textColor="#C5C1D7"
+        android:textSize="11sp" />
+</LinearLayout>
