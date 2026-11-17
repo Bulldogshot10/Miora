@@ -1,4 +1,4 @@
-use chrono::{Days, NaiveDate};
+use jiff::{civil::Date as NaiveDate, ToSpan};
 
 use crate::domain::cycle::cycle_length_days;
 use crate::domain::prediction::{CyclePrediction, PredictionConfidence};
@@ -34,11 +34,11 @@ pub fn estimate_next_period(starts: &[NaiveDate]) -> Option<CyclePrediction> {
     let expected_days = center.round().max(1.0) as u64;
     let latest_start = *ordered.last()?;
 
-    let expected_start = latest_start.checked_add_days(Days::new(expected_days))?;
+    let expected_start = latest_start.checked_add((expected_days as i64).days())?;
     let earliest_start =
-        latest_start.checked_add_days(Days::new(expected_days.saturating_sub(radius)))?;
+        latest_start.checked_add((expected_days.saturating_sub(radius) as i64).days())?;
     let latest_window_start =
-        latest_start.checked_add_days(Days::new(expected_days.saturating_add(radius)))?;
+        latest_start.checked_add((expected_days.saturating_add(radius) as i64).days())?;
 
     let confidence = match lengths.len() {
         0..=2 => PredictionConfidence::Early,
