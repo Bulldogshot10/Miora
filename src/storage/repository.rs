@@ -85,8 +85,7 @@ impl Repository {
             .optional()?
             .flatten();
         if let Some(previous_observation) = previous_observation {
-            let previous_observation =
-                previous_observation.parse::<NaiveDate>()?;
+            let previous_observation = previous_observation.parse::<NaiveDate>()?;
             if end < previous_observation {
                 return Err(
                     "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
@@ -179,8 +178,7 @@ impl Repository {
                 .optional()?
                 .flatten();
             if let Some(previous_observation) = previous_observation {
-                let previous_observation =
-                    previous_observation.parse::<NaiveDate>()?;
+                let previous_observation = previous_observation.parse::<NaiveDate>()?;
                 if last_bleeding_date < previous_observation {
                     return Err(
                         "The last bleeding day cannot be earlier than a previously confirmed bleeding observation."
@@ -246,9 +244,7 @@ impl Repository {
         row.map(|(start, end, observation, confirmed)| {
             Ok(PeriodBleedingRecord {
                 start_date: start.parse::<NaiveDate>()?,
-                end_date: end
-                    .map(|value| value.parse::<NaiveDate>())
-                    .transpose()?,
+                end_date: end.map(|value| value.parse::<NaiveDate>()).transpose()?,
                 last_observation: observation
                     .map(|value| value.parse::<NaiveDate>())
                     .transpose()?,
