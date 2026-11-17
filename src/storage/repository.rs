@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 use rusqlite::{OptionalExtension, params};
 
 use crate::domain::symptom::{Severity, SymptomCode, SymptomEntry};
@@ -28,14 +28,14 @@ pub struct Repository {
 }
 
 impl Repository {
-    pub fn open(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open(path: &std::path::Path, key: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
-            database: Database::open(path)?,
+            database: Database::open(path, key)?,
         })
     }
 
     pub fn add_period_start(&self, date: NaiveDate) -> Result<bool, Box<dyn std::error::Error>> {
-        let date_text = date.format("%Y-%m-%d").to_string();
+        let date_text = date.to_string();
         let overlaps_previous: bool = self.database.connection().query_row(
             "
             SELECT EXISTS(
@@ -72,8 +72,8 @@ impl Repository {
             return Err("The last bleeding day must be on or after the first day.".into());
         }
 
-        let start_text = start.format("%Y-%m-%d").to_string();
-        let end_text = end.format("%Y-%m-%d").to_string();
+        let start_text = start.to_string();
+        let end_text = end.to_string();
         let previous_observation: Option<String> = self
             .database
             .connection()
@@ -86,7 +86,7 @@ impl Repository {
             .flatten();
         if let Some(previous_observation) = previous_observation {
             let previous_observation =
-                NaiveDate::parse_from_str(&previous_observation, "%Y-%m-%d")?;
+                previous_observation.parse::<NaiveDate>()?;
             if end < previous_observation {
                 return Err(
                     "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
@@ -102,7 +102,7 @@ impl Repository {
         )?;
 
         if let Some(next_start) = next_start {
-            let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
+            let next_start = next_start.parse::<NaiveDate>()?;
             if end >= next_start {
                 return Err(
                     "The last bleeding day must be before the next recorded period start.".into(),
@@ -139,8 +139,8 @@ impl Repository {
             return Err("The observation date cannot be before the period start.".into());
         }
 
-        let start_text = start.format("%Y-%m-%d").to_string();
-        let observation_text = observation_date.format("%Y-%m-%d").to_string();
+        let start_text = start.to_string();
+        let observation_text = observation_date.to_string();
 
         if still_bleeding {
             let changed = self.database.connection().execute(
@@ -180,7 +180,7 @@ impl Repository {
                 .flatten();
             if let Some(previous_observation) = previous_observation {
                 let previous_observation =
-                    NaiveDate::parse_from_str(&previous_observation, "%Y-%m-%d")?;
+                    previous_observation.parse::<NaiveDate>()?;
                 if last_bleeding_date < previous_observation {
                     return Err(
                         "The last bleeding day cannot be earlier than a previously confirmed bleeding observation."
@@ -189,7 +189,7 @@ impl Repository {
                 }
             }
 
-            let last_bleeding_text = last_bleeding_date.format("%Y-%m-%d").to_string();
+            let last_bleeding_text = last_bleeding_date.to_string();
             let next_start: Option<String> = self.database.connection().query_row(
                 "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
                 params![start_text],
@@ -197,7 +197,7 @@ impl Repository {
             )?;
 
             if let Some(next_start) = next_start {
-                let next_start = NaiveDate::parse_from_str(&next_start, "%Y-%m-%d")?;
+                let next_start = next_start.parse::<NaiveDate>()?;
                 if last_bleeding_date >= next_start {
                     return Err(
                         "The last bleeding day must be before the next recorded period start."
@@ -245,12 +245,12 @@ impl Repository {
 
         row.map(|(start, end, observation, confirmed)| {
             Ok(PeriodBleedingRecord {
-                start_date: NaiveDate::parse_from_str(&start, "%Y-%m-%d")?,
+                start_date: start.parse::<NaiveDate>()?,
                 end_date: end
-                    .map(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d"))
+                    .map(|value| value.parse::<NaiveDate>())
                     .transpose()?,
                 last_observation: observation
-                    .map(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d"))
+                    .map(|value| value.parse::<NaiveDate>())
                     .transpose()?,
                 end_confirmed: confirmed,
             })
@@ -274,10 +274,10 @@ impl Repository {
         let mut durations = Vec::new();
         for row in rows {
             let (start, end) = row?;
-            let start = NaiveDate::parse_from_str(&start, "%Y-%m-%d")?;
-            let end = NaiveDate::parse_from_str(&end, "%Y-%m-%d")?;
+            let start = start.parse::<NaiveDate>()?;
+            let end = end.parse::<NaiveDate>()?;
             if end >= start {
-                let days = (end - start).num_days() as u32 + 1;
+                let days = (end - start).get_days() as u32 + 1;
                 if (1..=14).contains(&days) {
                     durations.push(days);
                 }
@@ -296,7 +296,7 @@ impl Repository {
 
         let mut dates = Vec::new();
         for row in rows {
-            dates.push(NaiveDate::parse_from_str(&row?, "%Y-%m-%d")?);
+            dates.push(row?.parse::<NaiveDate>()?);
         }
 
         Ok(dates)
@@ -314,7 +314,7 @@ impl Repository {
             .optional()?;
 
         value
-            .map(|date| NaiveDate::parse_from_str(&date, "%Y-%m-%d"))
+            .map(|date| date.parse::<NaiveDate>())
             .transpose()
             .map_err(Into::into)
     }
@@ -332,7 +332,7 @@ impl Repository {
 
         let connection = self.database.connection();
         let transaction = connection.unchecked_transaction()?;
-        let date_text = date.format("%Y-%m-%d").to_string();
+        let date_text = date.to_string();
 
         transaction.execute(
             "
@@ -379,7 +379,7 @@ impl Repository {
 
         let mut dates = Vec::new();
         for row in rows {
-            dates.push(NaiveDate::parse_from_str(&row?, "%Y-%m-%d")?);
+            dates.push(row?.parse::<NaiveDate>()?);
         }
 
         Ok(dates)
@@ -389,7 +389,7 @@ impl Repository {
         &self,
         date: NaiveDate,
     ) -> Result<Option<DailyCheckinRecord>, Box<dyn std::error::Error>> {
-        let date_text = date.format("%Y-%m-%d").to_string();
+        let date_text = date.to_string();
         let checkin: Option<(i64, i32, i32)> = self
             .database
             .connection()
@@ -451,7 +451,7 @@ impl Repository {
         let mut grouped: BTreeMap<NaiveDate, Vec<SymptomCode>> = BTreeMap::new();
         for row in rows {
             let (date, code) = row?;
-            let date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")?;
+            let date = date.parse::<NaiveDate>()?;
             let entries = grouped.entry(date).or_default();
             if let Some(code) = code {
                 let code = SymptomCode::parse_key(&code)
