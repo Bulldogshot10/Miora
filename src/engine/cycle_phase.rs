@@ -102,7 +102,9 @@ impl Default for BleedingDurationPosterior {
         // personal duration adds an observation and progressively dominates it.
         Self {
             counts: vec![0; (MAX_BLEEDING_DAYS - MIN_BLEEDING_DAYS + 1) as usize],
-            prior_weights: vec![0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01],
+            prior_weights: vec![
+                0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01,
+            ],
         }
     }
 }
@@ -195,8 +197,8 @@ pub fn estimate_cycle_phase(
         .filter(|days| (MIN_CYCLE_LENGTH..=MAX_CYCLE_LENGTH).contains(days))
         .collect();
     let cycle_history_available = !observed_cycle_lengths.is_empty();
-    let bleeding_history_available = confirmed_current_bleeding_days.is_some()
-        || !completed_bleeding_durations.is_empty();
+    let bleeding_history_available =
+        confirmed_current_bleeding_days.is_some() || !completed_bleeding_durations.is_empty();
 
     if let Some(observed_day) = observed_bleeding_through_day
         && cycle_day <= observed_day
@@ -413,17 +415,10 @@ mod tests {
         assert!((sum - 1.0).abs() < 1e-9);
     }
 
-
     #[test]
     fn cycle_beyond_supported_range_is_uncertain_not_luteal() {
         let start = date(2026, 1, 1);
-        let estimate = estimate_cycle_phase(
-            &[start],
-            &[],
-            date(2026, 2, 19),
-            None,
-            None,
-        ).unwrap();
+        let estimate = estimate_cycle_phase(&[start], &[], date(2026, 2, 19), None, None).unwrap();
 
         assert_eq!(estimate.cycle_day, 50);
         assert_eq!(estimate.phase, CyclePhase::Uncertain);
@@ -433,13 +428,8 @@ mod tests {
     #[test]
     fn confirmed_bleeding_duration_over_ten_days_is_not_clamped() {
         let start = date(2026, 1, 1);
-        let estimate = estimate_cycle_phase(
-            &[start],
-            &[],
-            date(2026, 1, 12),
-            Some(12),
-            None,
-        ).unwrap();
+        let estimate =
+            estimate_cycle_phase(&[start], &[], date(2026, 1, 12), Some(12), None).unwrap();
 
         assert_eq!(estimate.phase, CyclePhase::Menstrual);
         assert!((estimate.probabilities.menstrual - 1.0).abs() < 1e-9);
@@ -448,13 +438,8 @@ mod tests {
     #[test]
     fn current_bleeding_observation_alone_is_not_historical_personalization() {
         let start = date(2026, 1, 1);
-        let estimate = estimate_cycle_phase(
-            &[start],
-            &[],
-            date(2026, 1, 5),
-            None,
-            Some(5),
-        ).unwrap();
+        let estimate =
+            estimate_cycle_phase(&[start], &[], date(2026, 1, 5), None, Some(5)).unwrap();
 
         assert!(!estimate.is_personalized);
         assert!(!estimate.bleeding_history_available);
