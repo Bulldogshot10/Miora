@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use jiff::civil::Date as NaiveDate;
 
 use crate::domain::cycle::cycle_length_days;
 use crate::engine::bayesian::CycleLengthPosterior;
@@ -189,7 +189,7 @@ pub fn estimate_cycle_phase(
 
     let current_start_index = starts.iter().rposition(|start| *start <= date)?;
     let current_start = starts[current_start_index];
-    let cycle_day = (date - current_start).num_days() as u32 + 1;
+    let cycle_day = (date - current_start).get_days() as u32 + 1;
 
     let observed_cycle_lengths: Vec<u32> = starts
         .windows(2)
@@ -356,7 +356,7 @@ mod tests {
     use super::*;
 
     fn date(year: i32, month: u32, day: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(year, month, day).unwrap()
+        NaiveDate::new(year as i16, month as i8, day as i8).unwrap()
     }
 
     #[test]
