@@ -3,9 +3,12 @@
   import type { DashboardSnapshot, Tab } from "$lib/types";
   import { formatDate } from "$lib/utils";
 
+  let confirmingBleedingEnd = false;
+  let lastBleedingDate = "";
+
   export let snapshot: DashboardSnapshot;
   export let onNavigate: (tab: Tab) => void;
-  export let onBleedingStatus: (stillBleeding: boolean) => void;
+  export let onBleedingStatus: (stillBleeding: boolean, lastBleedingDate: string | null) => void;
   export let busy = false;
 
   const todayLabel = new Intl.DateTimeFormat(undefined, {
@@ -54,7 +57,7 @@
           </div>
         {/if}
       {:else}
-        <p class="cycle-detail">Log the first day of the most recent period. Miora will build estimates from her own history.</p>
+        <p class="cycle-detail">Log the first day of the most recent period. Miora will build estimates from your history.</p>
         <button class="button button-on-dark" type="button" onclick={() => onNavigate("calendar")}>
           <Plus size={17} /> Log period start
         </button>
@@ -71,7 +74,7 @@
         <div class="action-icon action-icon-lilac"><ClipboardCheck size={21} strokeWidth={1.8} /></div>
         <div class="action-copy">
           <p class="eyebrow">DAILY CHECK-IN</p>
-          <h2>How is she feeling today?</h2>
+          <h2>How are you feeling today?</h2>
           <p>Record mood, energy and symptoms.</p>
         </div>
         <button class="icon-action" type="button" aria-label="Open daily check-in" onclick={() => onNavigate("checkin")}>
@@ -84,7 +87,7 @@
         <div class="action-copy">
           <p class="eyebrow">PERIOD HISTORY</p>
           <h2>{snapshot.periodStarts.length} {snapshot.periodStarts.length === 1 ? "start logged" : "starts logged"}</h2>
-          <p>{snapshot.lastPeriodStart ? "View her dates and cycle history." : "Add a date to start her history."}</p>
+          <p>{snapshot.lastPeriodStart ? "View your dates and cycle history." : "Add a date to start your history."}</p>
         </div>
         <button class="icon-action" type="button" aria-label="Open calendar" onclick={() => onNavigate("calendar")}>
           <ArrowRight size={19} />
@@ -126,11 +129,19 @@
           <span>Luteal</span>
           <strong>{Math.round(snapshot.phase.probabilities.luteal * 100)}%</strong>
         </div>
+        <div class="phase-probability">
+          <span>Uncertain</span>
+          <strong>{Math.round(snapshot.phase.probabilities.uncertain * 100)}%</strong>
+        </div>
       </div>
       <p class="phase-basis">
-        {snapshot.phase.isPersonalized
-          ? "Personal model · " + snapshot.phase.completedIntervalsUsed + " cycle intervals · " + snapshot.phase.completedBleedingDurationsUsed + " confirmed bleeding durations."
-          : "Initial Bayesian prior. More of her own cycle and bleeding history will personalise this estimate."}
+        {snapshot.phase.isPersonalized ? "Personalized model." : "Initial Bayesian priors."}
+        {snapshot.phase.cycleHistoryAvailable
+          ? " Cycle history: " + snapshot.phase.completedIntervalsUsed + " intervals."
+          : " Cycle history: population prior."}
+        {snapshot.phase.bleedingHistoryAvailable
+          ? " Bleeding history: " + snapshot.phase.completedBleedingDurationsUsed + " confirmed durations."
+          : " Bleeding history: population prior."}
         Most likely phase: {Math.round(snapshot.phase.confidence * 100)}%.
       </p>
     </section>
@@ -145,30 +156,45 @@
   {#if snapshot.bleedingPrompt}
     <section class="bleeding-prompt-card" aria-labelledby="bleeding-question">
       <p class="eyebrow">BLEEDING CHECK · {snapshot.bleedingPrompt.completedBleedingDurationsUsed > 0 ? "PERSONAL ESTIMATE" : "FIRST-CYCLE BASELINE"}</p>
-      <h3 id="bleeding-question">Is she still bleeding today?</h3>
+      <h3 id="bleeding-question">Are you still bleeding today?</h3>
       <p>
-        Her current model expects bleeding to last around
+        Your current model expects bleeding to last around
         {snapshot.bleedingPrompt.predictedBleedingDurationDays} days.
-        Your answer updates her personal bleeding-duration model.
+        Your answer updates your personal bleeding-duration model.
       </p>
-      <div class="bleeding-prompt-actions">
-        <button
-          class="button button-outline"
-          type="button"
-          disabled={busy}
-          onclick={() => onBleedingStatus(true)}
-        >
-          Yes, still bleeding
-        </button>
-        <button
-          class="button button-primary"
-          type="button"
-          disabled={busy}
-          onclick={() => onBleedingStatus(false)}
-        >
-          No, it stopped
-        </button>
-      </div>
+      {#if confirmingBleedingEnd}
+        <label class="field-label" for="last-bleeding-date">What was your last day of bleeding?</label>
+        <input
+          id="last-bleeding-date"
+          class="form-input"
+          type="date"
+          min={snapshot.bleedingPrompt.periodStart}
+          max={snapshot.bleedingPrompt.checkDate}
+          bind:value={lastBleedingDate}
+        />
+        <div class="bleeding-prompt-actions">
+          <button class="button button-outline" type="button" disabled={busy} onclick={() => { confirmingBleedingEnd = false; lastBleedingDate = ""; }}>
+            Back
+          </button>
+          <button
+            class="button button-primary"
+            type="button"
+            disabled={busy || !lastBleedingDate}
+            onclick={() => onBleedingStatus(false, lastBleedingDate)}
+          >
+            Confirm last bleeding day
+          </button>
+        </div>
+      {:else}
+        <div class="bleeding-prompt-actions">
+          <button class="button button-outline" type="button" disabled={busy} onclick={() => onBleedingStatus(true, null)}>
+            Yes, still bleeding
+          </button>
+          <button class="button button-primary" type="button" disabled={busy} onclick={() => { confirmingBleedingEnd = true; }}>
+            No, it stopped
+          </button>
+        </div>
+      {/if}
     </section>
   {/if}
 
