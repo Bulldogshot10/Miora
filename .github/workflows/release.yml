@@ -52,6 +52,9 @@ jobs:
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web
 
+      - name: Generate application icons
+        run: npm run tauri:icons --prefix web
+
       - name: Configure Android signing
         env:
           ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}

@@ -10,6 +10,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "tauri:android:init": "tauri android init",
+    "tauri:icons": "tauri icon app-icon.png",
     "tauri:android:build": "tauri android build --apk --debug --target aarch64",
     "tauri:android:release": "tauri android build --apk --target aarch64"
   },
