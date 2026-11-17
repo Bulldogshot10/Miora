@@ -49,7 +49,7 @@ await Promise.all([
 
 
 const javaRoot = resolve(generatedAndroidDir, "java");
-const gradlePath = resolve(webDir, "src-tauri/gen/android/app/build.gradle");
+const gradlePath = resolve(webDir, "src-tauri/gen/android/app/build.gradle.kts");
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, stdio: "inherit" });
@@ -153,7 +153,7 @@ if (!gradle.includes("net.java.dev.jna:jna:")) {
   }
   gradle = gradle.replace(
     dependencyBlock[0],
-    dependencyBlock[0] + "\n    implementation 'net.java.dev.jna:jna:5.19.1@aar'",
+    dependencyBlock[0] + '\n    implementation("net.java.dev.jna:jna:5.19.1@aar")',
   );
   await writeFile(gradlePath, gradle);
 }
