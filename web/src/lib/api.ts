@@ -200,7 +200,7 @@ function makePhaseEstimate(
 
   const cycleDistribution = cycleLengthDistribution(intervals);
   const bleedDistribution = confirmedCurrentBleedingDays !== null
-    ? new Map([[Math.max(1, Math.min(14, confirmedCurrentBleedingDays)), 1]])
+    ? new Map([[Math.max(1, confirmedCurrentBleedingDays), 1]])
     : bleedingDistribution(bleedingDurations);
 
   if (observedBleedingThroughDay !== null && cycleDay <= observedBleedingThroughDay) {
