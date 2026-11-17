@@ -66,8 +66,19 @@ jobs:
           cargo generate-lockfile
           cargo generate-lockfile --manifest-path web/src-tauri/Cargo.toml
 
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo audit --file Cargo.lock
+          cargo audit --file web/src-tauri/Cargo.lock
+
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
+
+      - name: Audit Web dependencies
+        run: npm audit --audit-level=high --prefix web
 
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web
