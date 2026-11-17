@@ -1,4 +1,4 @@
-    /^\s*<uses-permission android:name="android\.permission\.INTERNET"\s*\/>\s*$/gm,
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,7 +52,7 @@ if (releaseBuild) {
   // Remove Tauri's direct INTERNET permission declaration. Keep a manifest
   // merger removal marker so no transitive Android library can re-add it.
   manifest = manifest.replace(
-    /^\\s*<uses-permission android:name="android\\.permission\\.INTERNET"\\s*\\/>\\s*$/gm,
+    /^\s*<uses-permission android:name="android\.permission\.INTERNET"\s*\/>\s*$/gm,
     "",
   );
   if (!manifest.includes('android:name="android.permission.INTERNET" tools:node="remove"')) {
