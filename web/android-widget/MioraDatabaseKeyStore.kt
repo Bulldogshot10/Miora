@@ -35,12 +35,26 @@ internal object MioraDatabaseKeyStore {
     fun getOrCreateDatabaseKey(context: Context): ByteArray {
         val appContext = context.applicationContext
         val keyFile = File(appContext.noBackupFilesDir, WRAPPED_KEY_FILE)
-        val wrappingKey = getOrCreateWrappingKey()
 
         if (keyFile.exists()) {
-            return decryptExistingKey(keyFile, wrappingKey)
+            return decryptExistingKey(keyFile, getOrCreateWrappingKey())
         }
 
+        // A missing wrapped key is recoverable only for a fresh install or a
+        // legacy plaintext SQLite database awaiting its first SQLCipher migration.
+        // Never mint a replacement key for an existing encrypted database.
+        val databaseFile = File(
+            File(appContext.dataDir, appContext.packageName),
+            "miora.sqlite3",
+        )
+        if (databaseFile.exists() && !hasPlaintextSqliteHeader(databaseFile)) {
+            throw IOException(
+                "The encrypted database exists but its Android Keystore key file is missing. " +
+                    "Refusing to create a replacement key.",
+            )
+        }
+
+        val wrappingKey = getOrCreateWrappingKey()
         val databaseKey = ByteArray(DATABASE_KEY_BYTES)
         SecureRandom().nextBytes(databaseKey)
 
@@ -82,6 +96,24 @@ internal object MioraDatabaseKeyStore {
         } catch (error: Exception) {
             databaseKey.fill(0)
             throw error
+        }
+    }
+
+    private fun hasPlaintextSqliteHeader(file: File): Boolean {
+        if (!file.isFile || file.length() < 16L) return false
+        val expected = byteArrayOf(
+            0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66,
+            0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00,
+        )
+        return file.inputStream().use { input ->
+            val header = ByteArray(expected.size)
+            var offset = 0
+            while (offset < header.size) {
+                val read = input.read(header, offset, header.size - offset)
+                if (read < 0) return@use false
+                offset += read
+            }
+            header.contentEquals(expected)
         }
     }
 
