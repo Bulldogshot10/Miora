@@ -256,7 +256,7 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 
 let gradle = await readFile(gradlePath, "utf8");
 gradle = gradle.replace(
-  /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
+  'manifestPlaceholders["usesCleartextTraffic"] = false',
   /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
 );
 if (!gradle.includes("net.java.dev.jna:jna:")) {
@@ -268,8 +268,8 @@ if (!gradle.includes("net.java.dev.jna:jna:")) {
     dependencyBlock[0],
     dependencyBlock[0] + '\n    implementation("net.java.dev.jna:jna:5.19.1@aar")',
   );
-  await writeFile(gradlePath, gradle);
 }
+await writeFile(gradlePath, gradle);
 
 console.log("Miora Android widget and UniFFI Kotlin bindings prepared.");
 
