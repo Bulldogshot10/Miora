@@ -78,7 +78,9 @@ jobs:
         run: npm ci --prefix web --no-audit --no-fund
 
       - name: Audit Web dependencies
-        run: npm audit --audit-level=high --prefix web
+        run: |
+          python3 .github/scripts/audit-npm.py
+          npm audit --omit=dev --audit-level=high --prefix web
 
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web

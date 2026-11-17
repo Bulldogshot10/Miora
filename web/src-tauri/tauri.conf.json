@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "identifier": "com.bulldogshot10.miora",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 0.0.0.0",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
