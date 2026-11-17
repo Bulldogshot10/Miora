@@ -234,10 +234,10 @@ function makePhaseEstimate(
         const weight = cycleWeight * bleedingWeight * 0.2;
         const ovulationDay = Math.max(1, cycleLength - lutealDays);
 
-        if (cycleDay > cycleLength) {
-          probabilities.uncertain += weight;
-        } else if (cycleDay <= bleedingDays) {
+        if (cycleDay <= bleedingDays) {
           probabilities.menstrual += weight;
+        } else if (cycleDay > cycleLength) {
+          probabilities.uncertain += weight;
         } else if (cycleDay + 1 < ovulationDay) {
           probabilities.follicular += weight;
         } else if (cycleDay <= ovulationDay + 1) {
