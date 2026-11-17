@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Run npm audit and allow only one documented, dev-only, unpatched advisory.
+"""Run npm audit with one narrowly scoped, dev-only advisory exception.
 
-picomatch's GHSA-fc5q-39xc-vjpf currently has no patched release. Miora only
-uses picomatch through Vite/fdir in the development toolchain. The dev server
-binds to loopback only; Android devices use ADB reverse forwarding rather than
-exposing a LAN listener. No app/runtime package may inherit this
-exception. Remove this exception as soon as picomatch publishes a fix.
+GHSA-fc5q-39xc-vjpf affects picomatch and is inherited by a known Vite tooling
+dependency chain. The exact package versions are allowlisted below and every
+affected lockfile node must be development-only. No runtime package or new
+version inherits the exception. Remove it when the upstream fix is available.
 """
 import json
 import subprocess
@@ -48,14 +47,6 @@ def advisory_urls(name: str, vulnerability: dict, all_vulnerabilities: dict, see
 def node_is_dev_only(node: str, packages: dict) -> bool:
     package = packages.get(node)
     return isinstance(package, dict) and package.get("dev") is True
-
-
-def version_at_or_below_4_0_7(version: str) -> bool:
-    try:
-        parts = tuple(int(part) for part in version.split(".")[:3])
-    except (TypeError, ValueError):
-        return False
-    return parts <= (4, 0, 7)
 
 
 def affected_by_picomatch(name: str, vulnerabilities: dict, seen=None) -> bool:

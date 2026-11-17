@@ -7,9 +7,9 @@ use crate::storage::migrations;
 
 const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 
-// Tauri and the Android widget can open the same database from different
-// threads during startup. Serialize open/migrate so only one plaintext-to-
-/* SQLCipher */ static DATABASE_OPEN_LOCK: Mutex<()> = Mutex::new(());
+// Tauri and the Android widget may initialize the same database concurrently.
+// Serialize opening and schema migration to avoid racing a plaintext export.
+static DATABASE_OPEN_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct Database {
     connection: Connection,

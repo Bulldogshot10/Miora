@@ -108,7 +108,7 @@ for (const item of allowed) {
   console.warn(
     `ALLOWED DEV-TOOL ADVISORY: ${item.name}@${item.version} — ${item.advisory}. ` +
     "No patched release is published; Vite is kept on loopback by default. " +
-    "This exception applies only to this exact transitive dev dependency and advisory.",
+    "This exception applies only to these exact dev-tool versions and advisory.",
   );
 }
 

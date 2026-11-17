@@ -1,5 +1,7 @@
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::{Arc, Barrier};
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jiff::civil::Date as NaiveDate;
@@ -303,4 +305,52 @@ fn migration_imports_legacy_period_starts() {
     assert_ne!(&header, b"SQLite format 3\0");
 
     let _ = std::fs::remove_file(path);
+}
+
+
+#[test]
+fn concurrent_legacy_database_opens_serialize_sqlcipher_migration() {
+    let path = temporary_database_path();
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(
+            "
+            CREATE TABLE period_starts (
+                start_date TEXT NOT NULL UNIQUE
+            );
+            INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
+            ",
+        ).unwrap();
+    }
+
+    let barrier = Arc::new(Barrier::new(2));
+    let handles: Vec<_> = (0..2)
+        .map(|_| {
+            let path = path.clone();
+            let barrier = Arc::clone(&barrier);
+            thread::spawn(move || {
+                barrier.wait();
+                let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+                repository.period_start_dates().unwrap()
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        assert_eq!(handle.join().unwrap(), vec![date(2026, 11, 1)]);
+    }
+
+    let mut header = [0_u8; 16];
+    std::fs::File::open(&path)
+        .unwrap()
+        .read_exact(&mut header)
+        .unwrap();
+    assert_ne!(&header, b"SQLite format 3\\0");
+
+    let _ = std::fs::remove_file(&path);
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = path.as_os_str().to_os_string();
+        sidecar.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(sidecar));
+    }
 }
