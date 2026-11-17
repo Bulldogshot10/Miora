@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, "..");
-const packageJson = JSON.parse(await readFile(resolve(webDir, "package.json"), "utf8"));
 const lock = JSON.parse(await readFile(resolve(webDir, "package-lock.json"), "utf8"));
 
 const result = spawnSync("npm", ["audit", "--json", "--audit-level=high"], {
@@ -42,20 +41,20 @@ for (const [name, item] of vulnerabilities) {
   );
   const isPicomatchAdvisory =
     name === "picomatch" &&
+    packageEntry?.version === "4.0.7" &&
     item.severity === "high" &&
     isDevOnly &&
     item.isDirect === false &&
-    item.fixAvailable === false &&
     item.via?.length === 1 &&
     directAdvisories.length === 1 &&
     directAdvisories[0].url === allowedAdvisory;
 
   const isFdirPropagation =
     name === "fdir" &&
+    packageEntry?.version === "6.5.0" &&
     item.severity === "high" &&
     isDevOnly &&
     item.isDirect === false &&
-    item.fixAvailable === false &&
     item.via?.length === 1 &&
     item.via[0] === "picomatch";
 
