@@ -90,14 +90,21 @@ def main() -> int:
             picomatch = packages.get("node_modules/picomatch", {})
             allowed = allowed and version_at_or_below_4_0_7(picomatch.get("version"))
         elif name == "fdir":
-            allowed = allowed and any(
-                item == "picomatch"
-                or (
-                    isinstance(item, dict)
-                    and item.get("name") == "picomatch"
-                    and item.get("url") == ADVISORY_URL
+            picomatch = packages.get("node_modules/picomatch", {})
+            picomatch_is_dev = node_is_dev_only("node_modules/picomatch", packages)
+            allowed = (
+                allowed
+                and picomatch_is_dev
+                and version_at_or_below_4_0_7(picomatch.get("version"))
+                and any(
+                    item == "picomatch"
+                    or (
+                        isinstance(item, dict)
+                        and item.get("name") == "picomatch"
+                        and item.get("url") == ADVISORY_URL
+                    )
+                    for item in vulnerability.get("via", [])
                 )
-                for item in vulnerability.get("via", [])
             )
 
         if allowed:
