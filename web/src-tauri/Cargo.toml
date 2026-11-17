@@ -14,6 +14,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-miora = { path = "../.." }
+miora = { package = "miora-core", path = "../.." }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
