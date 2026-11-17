@@ -124,6 +124,23 @@ A tag matching v* triggers a signed Android release. Configure these Actions rep
 
 Keep the release keystore private and back it up securely. Never commit it or keystore.properties.
 
+### Network and data protection
+
+The Vite dev server and preview server bind only to `127.0.0.1`; HMR is also pinned to loopback. For Android development on a USB-connected device, use ADB reverse forwarding instead of exposing Vite on the LAN:
+
+~~~sh
+adb reverse tcp:5173 tcp:5173
+adb reverse tcp:5174 tcp:5174
+~~~
+
+Android release builds remove the `INTERNET` permission and set cleartext traffic to false. The Android network security config permits cleartext only for `localhost`; production CSP only permits Tauri IPC and same-origin resources.
+
+SQLite uses SQLCipher with a 256-bit random key. Android wraps that key with AES-256-GCM using a non-exportable Android Keystore key; the wrapped key file is stored in `noBackupFilesDir`. Existing plaintext SQLite databases are exported to SQLCipher, integrity-checked, and atomically replaced on first encrypted open. If the Android Keystore key or wrapped key is missing while an encrypted database remains, Miora fails closed rather than generating a replacement key.
+
+For desktop Tauri development, provide a persistent 64-character hexadecimal key through `MIORA_DATABASE_KEY`. Desktop mode also fails closed if the key is missing.
+
+RustSec CI scans the Android target (`aarch64-android`). It ignores only `RUSTSEC-2026-0374` (`basic-toml`, unmaintained UniFFI template/build tooling) and `RUSTSEC-2024-0370` (`proc-macro-error`, unmaintained proc-macro tooling); neither is shipped as an application runtime dependency. Linux GTK-only advisories are filtered from the Android target audit. All remaining advisories fail CI and release builds.
+
 ## Data and privacy
 
 The Android app stores its database in Tauri's private app data directory. Android cloud backup and device-to-device data extraction are disabled for the app's private data. Miora does not need an account, cloud service, analytics SDK, or remote API. The browser preview uses localStorage only for local development and is separate from the Android SQLite database.
