@@ -192,6 +192,8 @@ jobs:
             echo "::error::Committed Android Gradle lockfiles changed during the release build."
             exit 1
           fi
+          tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
+          cmp web/android-gradle-locks/external/tauri-android/gradle.lockfile "$tauri_android_dir/gradle.lockfile"
 
       - name: Verify release APK signatures
         env:
