@@ -228,11 +228,13 @@ jobs:
             sleep "$((attempt * 20))"
           done
           test -s gradle.lockfile
+          test -s buildscript-gradle.lockfile
           test -s app/gradle.lockfile
           test -s buildSrc/gradle.lockfile
           test -s gradle/verification-metadata.xml
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles"
           cp gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/"
+          cp buildscript-gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/"
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/app"
           cp app/gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/app/"
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/buildSrc"

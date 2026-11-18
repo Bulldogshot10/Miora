@@ -146,7 +146,10 @@ function enableGradleLocking(source, label, lockBuildscriptClasspath = false) {
 
   if (!source.includes("lockAllConfigurations()")) {
     source = source.trimEnd() +
-      "\n\ndependencyLocking {\n    lockAllConfigurations()\n}\n";
+      "\n\ndependencyLocking {\n" +
+      "    lockAllConfigurations()\n" +
+      "    lockMode = org.gradle.api.artifacts.dsl.LockMode.STRICT\n" +
+      "}\n";
   }
   return source;
 }
@@ -347,6 +350,10 @@ const committedGradleLockFiles = [
   [
     resolve(webDir, "android-gradle-locks/root/gradle.lockfile"),
     resolve(webDir, "src-tauri/gen/android/gradle.lockfile"),
+  ],
+  [
+    resolve(webDir, "android-gradle-locks/root/buildscript-gradle.lockfile"),
+    resolve(webDir, "src-tauri/gen/android/buildscript-gradle.lockfile"),
   ],
   [
     resolve(webDir, "android-gradle-locks/app/gradle.lockfile"),
