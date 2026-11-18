@@ -133,10 +133,7 @@ function enableGradleLocking(
   { lockBuildscriptClasspath = false, allProjects = false, strict = false } = {},
 ) {
   if (lockBuildscriptClasspath) {
-    const classpathLock =
-      "configurations.classpath {\n" +
-      "    resolutionStrategy.activateDependencyLocking()\n" +
-      "}";
+
     if (!source.includes("resolutionStrategy.activateDependencyLocking()")) {
       const classpathConfiguration =
         "configurations.classpath {\n" +
@@ -165,7 +162,7 @@ function enableGradleLocking(
     ...(allProjects ? ["    dependencyLocking {"] : []),
     allProjects ? "        lockAllConfigurations()" : "    lockAllConfigurations()",
     allProjects
-      ? "        lockMode = org.gradle.api.artifacts.dsl.LockMode." + lockMode
+      ? "        lockMode.set(org.gradle.api.artifacts.dsl.LockMode." + lockMode + ")"
       : "    lockMode.set(org.gradle.api.artifacts.dsl.LockMode." + lockMode + ")",
     ...(allProjects ? ["    }"] : []),
     "}",
@@ -194,7 +191,10 @@ async function enableGeneratedGradleDependencyLocking(strict) {
     allProjects: true,
     strict,
   });
-  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc", { lockBuildscriptClasspath: true, strict });
+  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc", {
+    lockBuildscriptClasspath: true,
+    strict,
+  });
 
   await writeFile(rootGradlePath, rootBuild);
   await writeFile(buildSrcGradlePath, buildSrcBuild);
