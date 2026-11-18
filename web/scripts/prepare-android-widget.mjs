@@ -233,14 +233,12 @@ async function verifyGradleWrapper() {
   const gradlePropertiesPath = resolve(webDir, "src-tauri/gen/android/gradle.properties");
   let gradleProperties = await readFile(gradlePropertiesPath, "utf8");
   const stacktraceSetting = "org.gradle.logging.stacktrace=all";
-  if (/^org\\.gradle\\.logging\\.stacktrace=/m.test(gradleProperties)) {
-    gradleProperties = gradleProperties.replace(
-      /^org\\.gradle\\.logging\\.stacktrace=.*$/m,
-      stacktraceSetting,
-    );
-  } else {
-    gradleProperties = gradleProperties.trimEnd() + "\\n" + stacktraceSetting + "\\n";
-  }
+  const stacktracePrefix = "org.gradle.logging.stacktrace=";
+  const gradlePropertyLines = gradleProperties
+    .split(/\\r?\\n/)
+    .filter((line) => !line.startsWith(stacktracePrefix));
+  gradlePropertyLines.push(stacktraceSetting);
+  gradleProperties = gradlePropertyLines.join("\\n").trimEnd() + "\\n";
   await writeFile(gradlePropertiesPath, gradleProperties);
 }
 
