@@ -97,16 +97,16 @@ The widget calls the Rust check-in API through UniFFI and writes to the same pri
 
 ## Statistical inference engine
 
-The native Rust core combines four complementary statistical components:
+The native Rust core combines several deterministic statistical components:
 
-- **Bayesian online changepoint detection (BOCPD):** tracks posterior run-length probabilities and downweights observations that are unlikely to belong to the current cycle-length regime.
-- **Hierarchical partial pooling:** shrinks sparse individual estimates toward a weak population prior. Symptom probabilities use a Beta-Binomial hierarchy, pooling cycle-day estimates toward the individual's overall symptom rate.
-- **Weibull and Gamma survival models:** both candidates are fitted with right-censored likelihoods. Their predictive CDFs are model-averaged, then blended with the hierarchical predictive distribution according to the amount of personal evidence.
-- **Censoring and observation quality:** the active cycle contributes a right-censored observation each day. Completed intervals outside the supported 15–60 day modelling range are classified separately; gaps longer than 60 days are flagged as potentially missed period logs and excluded from the cycle-length fit.
+- **Bayesian online changepoint detection (BOCPD):** tracks posterior run-length probabilities with a Gaussian observation model, fixed known variance, and a constant 8% per-completed-cycle hazard. The resulting run-length posterior downweights observations unlikely to belong to the current regime.
+- **Hierarchical partial pooling:** cycle length uses a Normal-Normal individual posterior with a fixed weak population prior (28-day mean, 5-day between-person standard deviation, 4-day within-person standard deviation). Symptom rates use a Beta-Binomial partial-pooling estimate with a fixed strength of four pseudo-observations.
+- **Weibull and Gamma survival candidates:** both candidates are grid-fitted by weighted maximum likelihood, including the right-censored current cycle. Their predictive CDFs are combined using normalized relative maximum log-likelihood scores (an equal 50/50 mixture is used below five effective observations), then blended with the hierarchical predictive CDF according to the amount of personal evidence. These weights are likelihood-based mixture weights, not integrated Bayesian model probabilities.
+- **Censoring and observation quality:** the active cycle contributes a right-censored observation each day. Completed intervals outside the supported 15–60 day modelling range are classified separately; gaps longer than 60 days are flagged as potentially missed period logs and excluded from the completed-cycle fit.
 
-The median/MAD estimator remains available as `estimate_next_period_baseline` for rolling-origin comparisons. The native dashboard prediction uses the P10/P50/P90 quantiles from the survival inference pipeline. All inference runs locally in Rust and introduces no new runtime dependency or network requirement.
+The native dashboard returns integer-day P10/P50/P90 predictive quantiles. The median/MAD estimator remains available as `estimate_next_period_baseline` for comparison. BOCPD hazard, distribution priors, grid bounds, and partial-pooling strengths are fixed defaults; they are not estimated from a Miora population cohort. Model quality still requires rolling-origin validation and calibration against an independent, appropriately consented dataset before accuracy claims are made. All inference runs locally in Rust and introduces no new runtime dependency or network requirement.
 
-The browser-only localStorage preview retains its development fallback estimator; the production Android/Tauri application uses the Rust inference engine.
+The browser-only localStorage preview retains its development fallback estimator; the production Android/Tauri application uses the Rust inference engine. The browser fallback is not numerically equivalent to the native Rust predictor.
 
 ## Rust checks
 
@@ -132,7 +132,7 @@ The build toolchain is pinned in CI: Rust 1.100.0, Node.js 22.23.4, Temurin Java
 
 ## CI and releases
 
-GitHub Actions checks Rust formatting, tests and Clippy; checks Svelte/TypeScript; builds the web frontend; and builds an ARM64 Android debug APK.
+GitHub Actions checks Rust formatting, tests and Clippy; checks Svelte/TypeScript; builds the web frontend; and builds an ARM64 Android debug APK. Tag-triggered releases call the same reusable Rust/Web quality workflow against the exact tag commit before any production signing or publishing step.
 
 A tag matching `vMAJOR.MINOR.PATCH` (optionally with a prerelease suffix) triggers a signed Android release. The tag sets the APK version name; the GitHub Actions release workflow run number sets the monotonically increasing Android version code. The release workflow verifies both values in the APK before publishing. Configure these Actions repository secrets before creating a release tag:
 

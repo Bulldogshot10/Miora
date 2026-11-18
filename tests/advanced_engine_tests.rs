@@ -73,3 +73,71 @@ fn survival_forecast_conditions_on_the_current_censored_cycle() {
     assert!(censored.median_days > uncensored.median_days);
     assert!(censored.p90_days >= censored.median_days);
 }
+
+
+#[test]
+fn changepoint_run_length_posterior_is_normalized_and_regime_weights_are_monotone() {
+    let observations = [28.0, 29.0, 27.0, 28.0, 29.0, 28.0, 44.0, 46.0, 45.0];
+    let result = detect_cycle_regimes(&observations);
+
+    let posterior_sum: f64 = result
+        .run_length_probabilities
+        .iter()
+        .map(|(_, probability)| probability)
+        .sum();
+
+    assert!((posterior_sum - 1.0).abs() < 1e-10);
+    assert!(result
+        .run_length_probabilities
+        .iter()
+        .all(|(_, probability)| probability.is_finite() && (0.0..=1.0).contains(probability)));
+    assert!(result
+        .regime_weights
+        .windows(2)
+        .all(|pair| pair[0] <= pair[1] + 1e-12));
+    assert!((result.regime_weights.last().copied().unwrap_or_default() - 1.0).abs() < 1e-12);
+}
+
+#[test]
+fn gamma_distribution_matches_non_exponential_reference_values() {
+    let gamma_shape_two = Gamma {
+        shape: 2.0,
+        scale: 3.0,
+    };
+    let gamma_half_shape = Gamma {
+        shape: 0.5,
+        scale: 2.0,
+    };
+
+    let expected_shape_two = 1.0 - 3.0 * (-2.0_f64).exp();
+    let expected_half_shape = 0.682_689_492_137_085_9;
+
+    assert!((gamma_shape_two.cdf(6.0) - expected_shape_two).abs() < 1e-9);
+    assert!((gamma_half_shape.cdf(1.0) - expected_half_shape).abs() < 1e-8);
+}
+
+#[test]
+fn weibull_distribution_matches_shape_two_reference_values() {
+    let weibull = Weibull {
+        shape: 2.0,
+        scale: 10.0,
+    };
+
+    assert!((weibull.cdf(10.0) - (1.0 - (-1.0_f64).exp())).abs() < 1e-12);
+    assert!((weibull.log_pdf(10.0) - (0.2_f64.ln() - 1.0)).abs() < 1e-12);
+}
+
+#[test]
+fn survival_candidate_weights_are_finite_and_normalized() {
+    let lengths = [27.0, 28.0, 29.0, 28.0, 30.0, 29.0, 28.0, 27.0];
+    let weights = [1.0; 8];
+    let posterior = infer_cycle_length(&lengths, &weights, PopulationPrior::default());
+    let forecast = predict_next_cycle(&lengths, &weights, None, posterior).unwrap();
+
+    assert!(forecast.weibull_weight.is_finite());
+    assert!(forecast.gamma_weight.is_finite());
+    assert!((forecast.weibull_weight + forecast.gamma_weight - 1.0).abs() < 1e-12);
+    assert!((0.0..=1.0).contains(&forecast.hierarchical_weight));
+    assert!(forecast.p10_days <= forecast.median_days);
+    assert!(forecast.median_days <= forecast.p90_days);
+}

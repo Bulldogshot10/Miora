@@ -17,8 +17,9 @@ pub struct SurvivalForecast {
 }
 
 /// Fit Weibull and Gamma event-time models with a right-censored current cycle.
-/// The final predictive CDF is an information-weighted mixture with the
-/// hierarchical posterior predictive distribution.
+/// Candidate-family weights are normalized relative maximum log-likelihood
+/// scores (or 50/50 for sparse histories); they are not integrated model evidence.
+/// The final predictive CDF is blended with the hierarchical predictive distribution.
 pub fn predict_next_cycle(
     completed_lengths: &[f64],
     regime_weights: &[f64],
