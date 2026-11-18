@@ -147,8 +147,7 @@ fn fit_gamma(events: &[(f64, f64)], censor: Option<f64>) -> Option<(Gamma, f64)>
                 likelihood += model.log_survival(age);
             }
 
-            if likelihood.is_finite()
-                && best.as_ref().is_none_or(|(_, score)| likelihood > *score)
+            if likelihood.is_finite() && best.as_ref().is_none_or(|(_, score)| likelihood > *score)
             {
                 best = Some((model, likelihood));
             }
