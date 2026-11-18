@@ -729,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn symptom_inference_uses_positive_and_negative_same_day_checkins() {
+    fn symptom_inference_partially_pools_positive_and_negative_same_day_checkins() {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -763,7 +763,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(cramps_pattern.observations_used, 3);
-        assert!((cramps_pattern.probability - 0.6).abs() < 1e-9);
+        assert!((cramps_pattern.probability - (5.0 / 9.0)).abs() < 1e-9);
 
         drop(repository);
         let _ = std::fs::remove_file(path);
