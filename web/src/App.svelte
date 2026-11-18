@@ -45,7 +45,7 @@
   }
 
   async function handleVisibilityChange() {
-    if (document.visibilityState !== "visible" || hasUnsavedCheckin) return;
+    if (document.visibilityState !== "visible" || hasUnsavedCheckin || busy) return;
     try {
       snapshot = await getDashboardSnapshot();
       errorMessage = "";

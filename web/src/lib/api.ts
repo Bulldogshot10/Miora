@@ -494,6 +494,7 @@ export async function logPeriodStart(
 
   const starts = readStoredDates();
   const ends = readPeriodEnds();
+  const states = readBleedingStates();
   const overlapsPrevious = starts.some((start) => start < date && ends[start] && ends[start] >= date);
   if (overlapsPrevious) {
     throw new Error("The new period start overlaps a previously recorded bleeding interval.");
@@ -503,6 +504,13 @@ export async function logPeriodStart(
     if (!isIsoDate(endDate)) throw new Error("Choose a valid last bleeding date.");
     if (endDate < date) throw new Error("The last bleeding day must be on or after the first day.");
     if (endDate > today) throw new Error("The last bleeding day cannot be in the future.");
+    const previousObservation = [states[date]?.lastObservation, ends[date]]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1);
+    if (previousObservation && endDate < previousObservation) {
+      throw new Error("The last bleeding day cannot be earlier than a previously recorded bleeding observation.");
+    }
     const nextStart = starts.find((start) => start > date);
     if (nextStart && endDate >= nextStart) {
       throw new Error("The last bleeding day must be before the next recorded period start.");
@@ -518,7 +526,6 @@ export async function logPeriodStart(
   if (endDate) {
     ends[date] = endDate;
     localStorage.setItem(PERIOD_END_STORAGE_KEY, JSON.stringify(ends));
-    const states = readBleedingStates();
     states[date] = { lastObservation: endDate, endDate, confirmed: true };
     localStorage.setItem(BLEEDING_STATE_KEY, JSON.stringify(states));
   }
