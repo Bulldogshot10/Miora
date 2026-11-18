@@ -409,7 +409,7 @@ const regularGradleLockCount = committedGradleLockFiles.filter((entry) =>
 const buildscriptGradleLockCount = committedGradleLockFiles.filter((entry) =>
   entry.endsWith("/buildscript-gradle.lockfile") || entry === "buildscript-gradle.lockfile"
 ).length;
-const hasCommittedGradleLocks = regularGradleLockCount > 0 || buildscriptGradleLockCount > 0;
+const hasCommittedGradleLocks = committedGradleLockFiles.length > 0;
 
 if (hasCommittedGradleLocks) {
   if (regularGradleLockCount < 3 || buildscriptGradleLockCount < 2) {
