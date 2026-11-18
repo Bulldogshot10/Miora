@@ -83,7 +83,8 @@
         : "Period start saved.";
       activeTab = "home";
     } catch (error) {
-      errorMessage = String(error);
+      statusMessage = "Couldn't save period dates: " +
+        (error instanceof Error ? error.message : String(error));
     } finally {
       busy = false;
     }
