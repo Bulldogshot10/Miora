@@ -307,20 +307,21 @@ fn migration_imports_legacy_period_starts() {
     let _ = std::fs::remove_file(path);
 }
 
-
 #[test]
 fn concurrent_legacy_database_opens_serialize_sqlcipher_migration() {
     let path = temporary_database_path();
     {
         let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(
-            "
-            CREATE TABLE period_starts (
-                start_date TEXT NOT NULL UNIQUE
-            );
-            INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
-            ",
-        ).unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE period_starts (
+                    start_date TEXT NOT NULL UNIQUE
+                );
+                INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
+                ",
+            )
+            .unwrap();
     }
 
     let barrier = Arc::new(Barrier::new(2));
