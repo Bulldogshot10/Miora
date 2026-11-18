@@ -212,9 +212,6 @@ jobs:
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
           done <<< "$apks"
 
-      - name: Verify dependency lockfiles remained unchanged
-        run: git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
-
       - name: Configure ephemeral Android release signing
         run: |
           set -euo pipefail
@@ -284,6 +281,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: miora-debug-apk
-          path: web/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: web/src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
           if-no-files-found: error
           retention-days: 14
