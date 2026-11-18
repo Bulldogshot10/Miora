@@ -134,8 +134,8 @@ function enableGradleLocking(
 ) {
   if (lockBuildscriptClasspath) {
     const classpathLock =
-      "configurations.classpath {\\n" +
-      "    resolutionStrategy.activateDependencyLocking()\\n" +
+      "configurations.classpath {\n" +
+      "    resolutionStrategy.activateDependencyLocking()\n" +
       "}";
     if (!source.includes("resolutionStrategy.activateDependencyLocking()")) {
       if (!source.includes("buildscript {")) {
@@ -143,7 +143,7 @@ function enableGradleLocking(
       }
       source = source.replace(
         "buildscript {",
-        "buildscript {\\n    " + classpathLock.replaceAll("\\n", "\\n    "),
+        "buildscript {\n    " + classpathLock.replaceAll("\n", "\n    "),
       );
     }
   }
@@ -163,14 +163,14 @@ function enableGradleLocking(
     "}",
     endMarker,
   ];
-  const block = blockLines.join("\\n");
+  const block = blockLines.join("\n");
   const begin = source.indexOf(beginMarker);
   if (begin >= 0) {
     const end = source.indexOf(endMarker, begin);
     if (end < 0) throw new Error("Unclosed Miora Gradle dependency-locking marker.");
     source = source.slice(0, begin) + block + source.slice(end + endMarker.length);
   } else {
-    source = source.trimEnd() + "\\n\\n" + block + "\\n";
+    source = source.trimEnd() + "\n\n" + block + "\n";
   }
 
   return source;
