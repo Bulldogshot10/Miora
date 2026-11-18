@@ -45,6 +45,7 @@ jobs:
             web/package-lock.json
             web/src-tauri/tauri.conf.json
             web/src-tauri/Cargo.lock
+            web/android-gradle-locks/**
             web/scripts/prepare-android-widget.mjs
 
       - name: Set up Android SDK
@@ -87,6 +88,20 @@ jobs:
           buildscript_lock_count="$(find web/android-gradle-locks -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
           test "$regular_lock_count" -ge 3
           test "$buildscript_lock_count" -ge 2
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("web/android-gradle-locks/gradle/verification-metadata.xml").getroot()
+          component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
+          if component is None:
+              raise SystemExit("Committed Gradle verification metadata does not contain AAPT2.")
+          pom = next(
+              (item for item in component.findall("./{*}artifact")
+               if item.get("name", "").endswith(".pom")),
+              None,
+          )
+          if pom is None or not pom.findall("./{*}sha256"):
+              raise SystemExit("Committed AAPT2 POM metadata is missing its SHA-256.")
+          PY
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
 

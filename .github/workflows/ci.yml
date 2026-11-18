@@ -133,6 +133,7 @@ jobs:
             web/package-lock.json
             web/src-tauri/tauri.conf.json
             web/src-tauri/Cargo.lock
+            web/android-gradle-locks/**
             web/scripts/prepare-android-widget.mjs
 
       - name: Set up Android SDK
@@ -212,7 +213,7 @@ jobs:
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-gradle-lock-bootstrap-$attempt.log"
             set +e
-            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 :dependencies :app:dependencies >"$log_file" 2>&1
+            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 :dependencies :app:dependencies :app:packageUniversalReleaseResources >"$log_file" 2>&1
             status=$?
             set -e
             cat "$log_file"
@@ -249,6 +250,21 @@ jobs:
             echo "::error::Gradle did not generate dependency verification metadata."
             exit 1
           fi
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("gradle/verification-metadata.xml").getroot()
+          component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
+          if component is None:
+              raise SystemExit("AAPT2 is missing from Gradle dependency verification metadata.")
+          pom = next(
+              (item for item in component.findall("./{*}artifact")
+               if item.get("name", "").endswith(".pom")),
+              None,
+          )
+          if pom is None or not pom.findall("./{*}sha256"):
+              raise SystemExit("AAPT2 POM has no SHA-256 verification entry.")
+          print("AAPT2 POM SHA-256 is present in Gradle verification metadata.")
+          PY
 
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles"
           while IFS= read -r -d '' file; do
