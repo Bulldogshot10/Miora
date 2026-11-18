@@ -2,6 +2,7 @@ import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getTauriAndroidProjectDir } from "./tauri-android-project-dir.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, "..");
@@ -418,6 +419,11 @@ const buildscriptGradleLockCount = committedGradleLockFiles.filter((entry) =>
   entry.endsWith("/buildscript-gradle.lockfile") || entry === "buildscript-gradle.lockfile"
 ).length;
 const hasCommittedGradleLocks = committedGradleLockFiles.length > 0;
+const tauriAndroidLockRelativePath = "external/tauri-android/gradle.lockfile";
+const tauriAndroidProjectDir =
+  hasCommittedGradleLocks && committedGradleLockFiles.includes(tauriAndroidLockRelativePath)
+    ? getTauriAndroidProjectDir(webDir)
+    : null;
 
 if (hasCommittedGradleLocks) {
   if (regularGradleLockCount < 3 || buildscriptGradleLockCount < 2) {
@@ -436,9 +442,16 @@ if (bootstrapGradleLocks || hasCommittedGradleLocks) {
 if (hasCommittedGradleLocks) {
   for (const relativePath of committedGradleLockFiles) {
     const source = resolve(committedGradleLockDirectory, relativePath);
-    const destination = resolve(webDir, "src-tauri/gen/android", relativePath);
-    await mkdir(dirname(destination), { recursive: true });
-    await copyFile(source, destination);
+    if (relativePath === tauriAndroidLockRelativePath) {
+      if (!tauriAndroidProjectDir) {
+        throw new Error("Could not locate the Tauri Android Gradle project for its committed lockfile.");
+      }
+      await copyFile(source, resolve(tauriAndroidProjectDir, "gradle.lockfile"));
+    } else {
+      const destination = resolve(webDir, "src-tauri/gen/android", relativePath);
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(source, destination);
+    }
   }
 }
 

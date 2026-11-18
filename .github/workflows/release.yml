@@ -82,6 +82,7 @@ jobs:
           test -s web/package-lock.json
           test -s web/src-tauri/Cargo.lock
           test -s web/android-gradle-locks/gradle/verification-metadata.xml
+          test -s web/android-gradle-locks/external/tauri-android/gradle.lockfile
           regular_lock_count="$(find web/android-gradle-locks -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
           buildscript_lock_count="$(find web/android-gradle-locks -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
           test "$regular_lock_count" -ge 3

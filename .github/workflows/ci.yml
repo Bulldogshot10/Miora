@@ -228,7 +228,11 @@ jobs:
             sleep "$((attempt * 20))"
           done
 
+          tauri_android_dir="$(node "$GITHUB_WORKSPACE/web/scripts/tauri-android-project-dir.mjs")"
+          test -s "$tauri_android_dir/gradle.lockfile"
+
           regular_lock_count="$(find . -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
+          regular_lock_count=$((regular_lock_count + 1))
           buildscript_lock_count="$(find . -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
           verification_count="$(find . -type f -name 'verification-metadata.xml' | wc -l | tr -d ' ')"
           echo "Generated project lockfiles: $regular_lock_count"
@@ -254,6 +258,8 @@ jobs:
           done < <(
             find . -type f \( -name 'gradle.lockfile' -o -name 'buildscript-gradle.lockfile' -o -name 'verification-metadata.xml' \) -print0 | sort -z
           )
+          mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/external/tauri-android"
+          cp "$tauri_android_dir/gradle.lockfile" "$RUNNER_TEMP/miora-gradle-lockfiles/external/tauri-android/gradle.lockfile"
 
       - name: Upload bootstrapped Gradle lockfiles
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
