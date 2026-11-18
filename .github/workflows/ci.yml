@@ -213,7 +213,7 @@ jobs:
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-gradle-lock-bootstrap-$attempt.log"
             set +e
-            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 --init-script "$GITHUB_WORKSPACE/.github/scripts/resolve-android-aapt2.init.gradle" :dependencies :app:dependencies :app:packageUniversalReleaseResources >"$log_file" 2>&1
+            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 --init-script "$GITHUB_WORKSPACE/.github/scripts/resolve-android-aapt2.init.gradle" clean :app:clean :tauri-android:clean :dependencies :app:dependencies :app:packageUniversalReleaseResources --stacktrace >"$log_file" 2>&1
             status=$?
             set -e
             cat "$log_file"

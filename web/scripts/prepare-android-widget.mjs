@@ -226,6 +226,22 @@ async function verifyGradleWrapper() {
     properties = properties.trimEnd() + "\n" + checksumLine + "\n";
   }
   await writeFile(gradleWrapperPropertiesPath, properties);
+
+  // Tauri invokes Gradle through cargo-mobile2, so it does not expose a direct
+  // --stacktrace argument. Gradle's equivalent project property keeps the
+  // actual Tauri release assemble task's failures fully diagnosable.
+  const gradlePropertiesPath = resolve(webDir, "src-tauri/gen/android/gradle.properties");
+  let gradleProperties = await readFile(gradlePropertiesPath, "utf8");
+  const stacktraceSetting = "org.gradle.logging.stacktrace=all";
+  if (/^org\\.gradle\\.logging\\.stacktrace=/m.test(gradleProperties)) {
+    gradleProperties = gradleProperties.replace(
+      /^org\\.gradle\\.logging\\.stacktrace=.*$/m,
+      stacktraceSetting,
+    );
+  } else {
+    gradleProperties = gradleProperties.trimEnd() + "\\n" + stacktraceSetting + "\\n";
+  }
+  await writeFile(gradlePropertiesPath, gradleProperties);
 }
 
 function run(command, args, cwd) {
