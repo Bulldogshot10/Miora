@@ -66,19 +66,37 @@ gradle.projectsEvaluated {
         classifier: "linux"
     ])
 
-    // Resolve before tasks execute so --write-verification-metadata captures
-    // the POM and platform-specific Linux binary JAR checksums.
-    def aapt2Jar = configuration.resolve().find {
-        it.isFile() && it.name.startsWith("aapt2-") && it.name.endsWith("-linux.jar")
-    }
-    if (aapt2Jar == null || aapt2Jar.length() == 0L) {
-        throw new GradleException(
-            "Could not resolve the non-empty Linux AAPT2 JAR for AGP ${agpVersion}."
-        )
+    // Resolve the configuration from a task action owned by :app. Resolving a
+    // project configuration from the projectsEvaluated callback is unsafe on
+    // modern Gradle: no exclusive project-state lock is held at that point.
+    // The task runs before AGP's resource packaging so --write-locks and
+    // --write-verification-metadata capture the exact AAPT2 POM and Linux JAR.
+    def aapt2VerificationTask = appProject.tasks.register("mioraResolveAapt2ForVerification") {
+        group = "verification"
+        description = "Resolve the AGP-matched Linux AAPT2 binary for checksum verification."
+
+        doLast {
+            def aapt2Jar = configuration.resolve().find {
+                it.isFile() && it.name.startsWith("aapt2-") && it.name.endsWith("-linux.jar")
+            }
+            if (aapt2Jar == null || aapt2Jar.length() == 0L) {
+                throw new GradleException(
+                    "Could not resolve the non-empty Linux AAPT2 JAR for AGP ${agpVersion}."
+                )
+            }
+
+            println(
+                "Resolved AGP ${agpVersion} Linux AAPT2 ${aapt2Version}: " +
+                "${aapt2Jar.name} (${aapt2Jar.length()} bytes)"
+            )
+        }
     }
 
-    println(
-        "Resolved AGP ${agpVersion} Linux AAPT2 ${aapt2Version}: " +
-        "${aapt2Jar.name} (${aapt2Jar.length()} bytes)"
-    )
+    // Keep dependency resolution in the same project as its task action.
+    // The command already schedules this AGP task for verification metadata.
+    appProject.tasks.matching {
+        it.name == "packageUniversalReleaseResources"
+    }.configureEach {
+        dependsOn(aapt2VerificationTask)
+    }
 }
