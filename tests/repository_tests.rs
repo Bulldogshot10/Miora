@@ -188,7 +188,11 @@ fn database_is_encrypted_and_rejects_an_incorrect_key() {
         .unwrap()
         .read_exact(&mut header)
         .unwrap();
-    assert_ne!(&header, b"SQLite format 3\0");
+    const PLAINTEXT_SQLITE_HEADER: [u8; 16] = [
+        0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20,
+        0x33, 0x00,
+    ];
+    assert_ne!(header, PLAINTEXT_SQLITE_HEADER);
 
     let raw_connection = Connection::open(&path).unwrap();
     assert!(
