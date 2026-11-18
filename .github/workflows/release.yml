@@ -109,7 +109,9 @@ jobs:
           if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
               raise SystemExit(f"Invalid Android release tag: {tag!r}; expected vMAJOR.MINOR.PATCH[-prerelease].")
 
-          version_code = int(os.environ["RELEASE_VERSION_CODE"])
+          # Tauri 0.3.0 currently maps to Android versionCode 3000.
+          # Offset the monotonically increasing release run number above that baseline.
+          version_code = 3_000 + int(os.environ["RELEASE_VERSION_CODE"])
           if not 1 <= version_code <= 2_100_000_000:
               raise SystemExit(f"Android version code is outside the supported range: {version_code}")
 
@@ -185,6 +187,7 @@ jobs:
           RELEASE_VERSION_CODE: ${{ github.run_number }}
         run: |
           expected_version="${RELEASE_TAG#v}"
+          expected_version_code=$((3000 + RELEASE_VERSION_CODE))
           mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
           if [ "${#apks[@]}" -eq 0 ]; then
             echo "::error::No release APK was produced."
@@ -196,8 +199,12 @@ jobs:
 
           for apk in "${apks[@]}"; do
             badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")
-            if ! grep -Fq "versionCode='$RELEASE_VERSION_CODE'" <<< "$badging"; then
-              echo "::error::APK versionCode does not match workflow run number $RELEASE_VERSION_CODE."
+            if ! grep -Fq "package: name='com.bulldogshot10.miora'" <<< "$badging"; then
+              echo "::error::APK package identifier does not match com.bulldogshot10.miora."
+              exit 1
+            fi
+            if ! grep -Fq "versionCode='$expected_version_code'" <<< "$badging"; then
+              echo "::error::APK versionCode does not match expected value $expected_version_code."
               exit 1
             fi
             if ! grep -Fq "versionName='$expected_version'" <<< "$badging"; then
