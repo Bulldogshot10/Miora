@@ -92,11 +92,40 @@ gradle.projectsEvaluated {
         }
     }
 
-    // Keep dependency resolution in the same project as its task action.
-    // The command already schedules this AGP task for verification metadata.
+    // AGP creates :app:androidApis lazily and the ordinary dependency report
+    // does not resolve it. Strict dependency locking still requires a lock state
+    // for this configuration when release resource processing first consumes it.
+    // Resolve it during the lock bootstrap task so --write-locks records its
+    // state (the Android platform itself is pinned separately to API 36).
+    def androidApisConfiguration = appProject.configurations.findByName("androidApis")
+    if (androidApisConfiguration == null || !androidApisConfiguration.canBeResolved) {
+        throw new GradleException(
+            "AGP ${agpVersion} did not expose a resolvable :app:androidApis configuration."
+        )
+    }
+    def androidApisLockTask = appProject.tasks.register("mioraResolveAndroidApisForLocking") {
+        group = "verification"
+        description = "Resolve AGP's Android API configuration so strict dependency locking has a complete state."
+
+        doLast {
+            def androidApiFiles = androidApisConfiguration.resolve()
+            if (androidApiFiles.isEmpty()) {
+                throw new GradleException(
+                    "AGP :app:androidApis resolved no Android API files; verify Android SDK Platform 36."
+                )
+            }
+            println(
+                "Resolved :app:androidApis for strict dependency locking: " +
+                "${androidApiFiles.size()} file(s)"
+            )
+        }
+    }
+
+    // Keep dependency resolution in the same project as its task actions.
+    // Both tasks are required when generating the lock and verification files.
     appProject.tasks.matching {
         it.name == "packageUniversalReleaseResources"
     }.configureEach {
-        dependsOn(aapt2VerificationTask)
+        dependsOn(aapt2VerificationTask, androidApisLockTask)
     }
 }
