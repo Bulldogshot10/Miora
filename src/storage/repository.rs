@@ -49,21 +49,24 @@ fn set_period_end_in_transaction(
     }
 
     let start_text = start.to_string();
-    let previous_observation: Option<String> = transaction
+    let stored_observation: Option<Option<String>> = transaction
         .query_row(
             "SELECT last_bleeding_observation FROM periods WHERE start_date = ?1",
             params![start_text],
             |row| row.get(0),
         )
-        .optional()?
-        .flatten()
-        .ok_or("The period start date could not be found.")?;
-    let previous_observation = previous_observation.parse::<NaiveDate>()?;
-    if end < previous_observation {
-        return Err(
-            "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
-                .into(),
-        );
+        .optional()?;
+    let Some(previous_observation) = stored_observation else {
+        return Err("The period start date could not be found.".into());
+    };
+    if let Some(previous_observation) = previous_observation {
+        let previous_observation = previous_observation.parse::<NaiveDate>()?;
+        if end < previous_observation {
+            return Err(
+                "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
+                    .into(),
+            );
+        }
     }
 
     let next_start: Option<String> = transaction.query_row(
@@ -191,7 +194,7 @@ impl Repository {
             return Err("This period has already been marked as finished.".into());
         }
 
-        if let Some(previous_observation) = previous_observation {
+        if let Some(previous_observation) = previous_observation.as_deref() {
             let previous_observation = previous_observation.parse::<NaiveDate>()?;
             if observation_date < previous_observation {
                 return Err("The bleeding observation date cannot move backwards.".into());
@@ -224,7 +227,7 @@ impl Repository {
                         .into(),
                 );
             }
-            if let Some(previous_observation) = previous_observation {
+            if let Some(previous_observation) = previous_observation.as_deref() {
                 let previous_observation = previous_observation.parse::<NaiveDate>()?;
                 if last_bleeding_date < previous_observation {
                     return Err(
