@@ -139,67 +139,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
         run: |
+          set -euo pipefail
           STORE_PASSWORD="${ANDROID_KEY_STORE_PASSWORD:-$ANDROID_KEY_PASSWORD}"
           if [ -z "$ANDROID_KEY_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$STORE_PASSWORD" ]; then
             echo "::error::Configure ANDROID_KEY_BASE64, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, and optionally ANDROID_KEY_STORE_PASSWORD."
             exit 1
           fi
 
-          cd web/src-tauri/gen/android
+          umask 077
           printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/miora-release.jks"
-          {
-            echo "keyAlias=$ANDROID_KEY_ALIAS"
-            echo "keyPassword=$ANDROID_KEY_PASSWORD"
-            echo "storePassword=$STORE_PASSWORD"
-            echo "storeFile=$RUNNER_TEMP/miora-release.jks"
-          } > keystore.properties
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          gradle_file = Path("app/build.gradle.kts")
-          source = gradle_file.read_text()
-
-          if "import java.io.FileInputStream" not in source:
-              source = "import java.io.FileInputStream\nimport java.util.Properties\n\n" + source
-
-          signing_block = '''
-          signingConfigs {
-              create("release") {
-                  val keystorePropertiesFile = rootProject.file("keystore.properties")
-                  val keystoreProperties = Properties()
-                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-                  keyAlias = keystoreProperties["keyAlias"] as String
-                  keyPassword = keystoreProperties["keyPassword"] as String
-                  storeFile = file(keystoreProperties["storeFile"] as String)
-                  storePassword = keystoreProperties["storePassword"] as String
-              }
-          }
-
-          '''
-
-          if 'create("release")' not in source:
-              if "buildTypes {" not in source:
-                  raise SystemExit("Could not find the Gradle buildTypes block; refusing to create an unsigned release.")
-              source = source.replace("buildTypes {", signing_block + "buildTypes {", 1)
-
-          release_marker = 'getByName("release") {'
-          if release_marker not in source:
-              raise SystemExit("Could not find the release build type; refusing to create an unsigned release.")
-
-          signing_line = 'signingConfig = signingConfigs.getByName("release")'
-          if signing_line not in source:
-              source = source.replace(
-                  release_marker,
-                  release_marker + '\n            ' + signing_line,
-                  1
-              )
-
-          if signing_line not in source or 'create("release")' not in source:
-              raise SystemExit("Release signing config was not applied.")
-
-          gradle_file.write_text(source)
-          PY
+          ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/miora-release.jks"
+          export ANDROID_KEYSTORE_PATH
+          python3 web/scripts/configure-android-signing.py
 
       - name: Build signed release APK (retry Maven Central HTTP 429)
         env:
