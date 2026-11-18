@@ -362,15 +362,17 @@ fn migration_refuses_to_replace_plaintext_database_when_wal_checkpoint_is_busy()
     let path = temporary_database_path();
     {
         let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(
-            "
-            PRAGMA journal_mode = WAL;
-            CREATE TABLE period_starts (
-                start_date TEXT NOT NULL UNIQUE
-            );
-            INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
-            ",
-        ).unwrap();
+        connection
+            .execute_batch(
+                "
+                PRAGMA journal_mode = WAL;
+                CREATE TABLE period_starts (
+                    start_date TEXT NOT NULL UNIQUE
+                );
+                INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
+                ",
+            )
+            .unwrap();
     }
 
     let reader = Connection::open(&path).unwrap();
@@ -382,10 +384,12 @@ fn migration_refuses_to_replace_plaintext_database_when_wal_checkpoint_is_busy()
 
     {
         let writer = Connection::open(&path).unwrap();
-        writer.execute(
-            "INSERT INTO period_starts (start_date) VALUES ('2026-11-29')",
-            [],
-        ).unwrap();
+        writer
+            .execute(
+                "INSERT INTO period_starts (start_date) VALUES ('2026-11-29')",
+                [],
+            )
+            .unwrap();
     }
 
     assert!(
