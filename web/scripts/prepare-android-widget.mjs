@@ -127,11 +127,15 @@ const buildSrcGradlePath = resolve(
   "src-tauri/gen/android/buildSrc/build.gradle.kts",
 );
 
-function enableGradleLocking(source, label, lockBuildscriptClasspath = false) {
+function enableGradleLocking(
+  source,
+  label,
+  { lockBuildscriptClasspath = false, allProjects = false, strict = false } = {},
+) {
   if (lockBuildscriptClasspath) {
     const classpathLock =
-      "configurations.classpath {\n" +
-      "    resolutionStrategy.activateDependencyLocking()\n" +
+      "configurations.classpath {\\n" +
+      "    resolutionStrategy.activateDependencyLocking()\\n" +
       "}";
     if (!source.includes("resolutionStrategy.activateDependencyLocking()")) {
       if (!source.includes("buildscript {")) {
@@ -139,32 +143,52 @@ function enableGradleLocking(source, label, lockBuildscriptClasspath = false) {
       }
       source = source.replace(
         "buildscript {",
-        "buildscript {\n    " + classpathLock.replaceAll("\n", "\n    "),
+        "buildscript {\\n    " + classpathLock.replaceAll("\\n", "\\n    "),
       );
     }
   }
 
-  if (!source.includes("lockAllConfigurations()")) {
-    source = source.trimEnd() +
-      "\n\ndependencyLocking {\n" +
-      "    lockAllConfigurations()\n" +
-      "    lockMode = org.gradle.api.artifacts.dsl.LockMode.STRICT\n" +
-      "}\n";
+  const beginMarker = "// Miora dependency locking BEGIN";
+  const endMarker = "// Miora dependency locking END";
+  const lockMode = strict ? "STRICT" : "DEFAULT";
+  const blockLines = [
+    beginMarker,
+    allProjects ? "allprojects {" : "dependencyLocking {",
+    ...(allProjects ? ["    dependencyLocking {"] : []),
+    allProjects ? "        lockAllConfigurations()" : "    lockAllConfigurations()",
+    allProjects
+      ? "        lockMode = org.gradle.api.artifacts.dsl.LockMode." + lockMode
+      : "    lockMode = org.gradle.api.artifacts.dsl.LockMode." + lockMode,
+    ...(allProjects ? ["    }"] : []),
+    "}",
+    endMarker,
+  ];
+  const block = blockLines.join("\\n");
+  const begin = source.indexOf(beginMarker);
+  if (begin >= 0) {
+    const end = source.indexOf(endMarker, begin);
+    if (end < 0) throw new Error("Unclosed Miora Gradle dependency-locking marker.");
+    source = source.slice(0, begin) + block + source.slice(end + endMarker.length);
+  } else {
+    source = source.trimEnd() + "\\n\\n" + block + "\\n";
   }
+
   return source;
 }
 
-async function enableGeneratedGradleDependencyLocking() {
+async function enableGeneratedGradleDependencyLocking(strict) {
   let rootBuild = await readFile(rootGradlePath, "utf8");
-  let appBuild = await readFile(gradlePath, "utf8");
   let buildSrcBuild = await readFile(buildSrcGradlePath, "utf8");
 
-  rootBuild = enableGradleLocking(rootBuild, "root", true);
-  appBuild = enableGradleLocking(appBuild, "app");
-  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc");
+  // allprojects applies to the root, :app, and Tauri's :tauri-android subproject.
+  rootBuild = enableGradleLocking(rootBuild, "root", {
+    lockBuildscriptClasspath: true,
+    allProjects: true,
+    strict,
+  });
+  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc", { strict });
 
   await writeFile(rootGradlePath, rootBuild);
-  await writeFile(gradlePath, appBuild);
   await writeFile(buildSrcGradlePath, buildSrcBuild);
 }
 const gradleWrapperPropertiesPath = resolve(
@@ -346,28 +370,7 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 await verifyGradleWrapper();
 
 const bootstrapGradleLocks = process.argv.includes("--bootstrap-gradle-locks");
-const committedGradleLockFiles = [
-  [
-    resolve(webDir, "android-gradle-locks/root/gradle.lockfile"),
-    resolve(webDir, "src-tauri/gen/android/gradle.lockfile"),
-  ],
-  [
-    resolve(webDir, "android-gradle-locks/root/buildscript-gradle.lockfile"),
-    resolve(webDir, "src-tauri/gen/android/buildscript-gradle.lockfile"),
-  ],
-  [
-    resolve(webDir, "android-gradle-locks/app/gradle.lockfile"),
-    resolve(webDir, "src-tauri/gen/android/app/gradle.lockfile"),
-  ],
-  [
-    resolve(webDir, "android-gradle-locks/buildSrc/gradle.lockfile"),
-    resolve(webDir, "src-tauri/gen/android/buildSrc/gradle.lockfile"),
-  ],
-  [
-    resolve(webDir, "android-gradle-locks/gradle/verification-metadata.xml"),
-    resolve(webDir, "src-tauri/gen/android/gradle/verification-metadata.xml"),
-  ],
-];
+const committedGradleLockDirectory = resolve(webDir, "android-gradle-locks");
 
 async function hasFile(path) {
   try {
@@ -378,25 +381,57 @@ async function hasFile(path) {
   }
 }
 
-const gradleLockFilePresence = await Promise.all(
-  committedGradleLockFiles.map(([source]) => hasFile(source)),
-);
-const hasCommittedGradleLocks = gradleLockFilePresence.every(Boolean);
-if (gradleLockFilePresence.some(Boolean) && !hasCommittedGradleLocks) {
-  throw new Error(
-    "The committed Android Gradle lockfile set is incomplete; refusing an unlocked build.",
-  );
+async function listGradleLockFiles(directory, prefix = "") {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const relativePath = prefix ? prefix + "/" + entry.name : entry.name;
+    const fullPath = resolve(directory, relativePath);
+    if (entry.isDirectory()) {
+      files.push(...await listGradleLockFiles(fullPath, relativePath));
+    } else if (
+      entry.isFile() &&
+      (entry.name === "gradle.lockfile" ||
+        entry.name === "buildscript-gradle.lockfile" ||
+        entry.name === "verification-metadata.xml")
+    ) {
+      files.push(relativePath);
+    }
+  }
+  return files.sort();
+}
+
+const committedGradleLockFiles = await hasFile(committedGradleLockDirectory)
+  ? await listGradleLockFiles(committedGradleLockDirectory)
+  : [];
+const regularGradleLockCount = committedGradleLockFiles.filter((entry) =>
+  entry.endsWith("/gradle.lockfile") || entry === "gradle.lockfile"
+).length;
+const buildscriptGradleLockCount = committedGradleLockFiles.filter((entry) =>
+  entry.endsWith("/buildscript-gradle.lockfile") || entry === "buildscript-gradle.lockfile"
+).length;
+const hasCommittedGradleLocks = regularGradleLockCount > 0 || buildscriptGradleLockCount > 0;
+
+if (hasCommittedGradleLocks) {
+  if (regularGradleLockCount < 3 || buildscriptGradleLockCount < 2) {
+    throw new Error(
+      "The committed Android Gradle lock set is incomplete: expected at least three project lockfiles and two buildscript lockfiles.",
+    );
+  }
+  if (!committedGradleLockFiles.includes("gradle/verification-metadata.xml")) {
+    throw new Error("The committed Android Gradle dependency verification metadata is missing.");
+  }
 }
 
 if (bootstrapGradleLocks || hasCommittedGradleLocks) {
-  await enableGeneratedGradleDependencyLocking();
+  await enableGeneratedGradleDependencyLocking(hasCommittedGradleLocks && !bootstrapGradleLocks);
 }
 if (hasCommittedGradleLocks) {
-  await Promise.all(
-    committedGradleLockFiles.map(([source, destination]) =>
-      copyFile(source, destination),
-    ),
-  );
+  for (const relativePath of committedGradleLockFiles) {
+    const source = resolve(committedGradleLockDirectory, relativePath);
+    const destination = resolve(webDir, "src-tauri/gen/android", relativePath);
+    await mkdir(dirname(destination), { recursive: true });
+    await copyFile(source, destination);
+  }
 }
 
 let gradle = await readFile(gradlePath, "utf8");
