@@ -13,7 +13,7 @@ jobs:
     name: Validate the exact tagged revision
     uses: ./.github/workflows/ci.yml
     with:
-      quality_only: true
+      quality_only: false
     permissions:
       contents: read
 
@@ -87,32 +87,12 @@ jobs:
           toolchain: "1.100.0"
           targets: aarch64-linux-android
 
-      - name: Verify and prefetch committed lockfiles
+      - name: Verify committed Rust and npm lockfiles
         run: |
           set -euo pipefail
           test -s Cargo.lock
           test -s web/package-lock.json
           test -s web/src-tauri/Cargo.lock
-          test -s web/android-gradle-locks/gradle/verification-metadata.xml
-          test -s web/android-gradle-locks/external/tauri-android/gradle.lockfile
-          regular_lock_count="$(find web/android-gradle-locks -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
-          buildscript_lock_count="$(find web/android-gradle-locks -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
-          test "$regular_lock_count" -ge 3
-          test "$buildscript_lock_count" -ge 2
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse("web/android-gradle-locks/gradle/verification-metadata.xml").getroot()
-          component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
-          if component is None:
-              raise SystemExit("Committed Gradle verification metadata does not contain AAPT2.")
-          pom = next(
-              (item for item in component.findall("./{*}artifact")
-               if item.get("name", "").endswith(".pom")),
-              None,
-          )
-          if pom is None or not pom.findall("./{*}sha256"):
-              raise SystemExit("Committed AAPT2 POM metadata is missing its SHA-256.")
-          PY
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
 
@@ -164,6 +144,59 @@ jobs:
       - name: Initialize Tauri Android project
         run: npm run tauri:android:init --prefix web
 
+      - name: Download Gradle lock state from exact-tag validation
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: miora-android-gradle-lockfiles
+          path: ${{ runner.temp }}/miora-gradle-lockfiles
+
+      - name: Verify Android Gradle lock state
+        run: |
+          set -euo pipefail
+          locks="$RUNNER_TEMP/miora-gradle-lockfiles"
+          test -s "$locks/app/gradle.lockfile"
+          test -s "$locks/buildSrc/gradle.lockfile"
+          test -s "$locks/buildSrc/buildscript-gradle.lockfile"
+          test -s "$locks/buildscript-gradle.lockfile"
+          test -s "$locks/external/tauri-android/gradle.lockfile"
+          test -s "$locks/gradle/verification-metadata.xml"
+
+          actual_files="$(find "$locks" -type f -printf '%P\\n' | sort)"
+          expected_files="$(printf '%s\\n' \
+            app/gradle.lockfile \
+            buildSrc/buildscript-gradle.lockfile \
+            buildSrc/gradle.lockfile \
+            buildscript-gradle.lockfile \
+            external/tauri-android/gradle.lockfile \
+            gradle/verification-metadata.xml)"
+          diff -u <(printf '%s\\n' "$expected_files") <(printf '%s\\n' "$actual_files")
+
+          regular_lock_count="$(find "$locks" -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
+          buildscript_lock_count="$(find "$locks" -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
+          test "$regular_lock_count" -eq 3
+          test "$buildscript_lock_count" -eq 2
+
+          python3 - "$locks/gradle/verification-metadata.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(sys.argv[1]).getroot()
+          component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
+          if component is None:
+              raise SystemExit("Validation artifact has no AGP-matched AAPT2 verification component.")
+
+          artifacts = component.findall("./{*}artifact")
+          required = {
+              "AAPT2 POM": lambda name: name.endswith(".pom"),
+              "AAPT2 Linux binary JAR": lambda name: name.endswith("-linux.jar"),
+          }
+          for label, matches in required.items():
+              artifact = next((item for item in artifacts if matches(item.get("name", ""))), None)
+              if artifact is None or not artifact.findall("./{*}sha256"):
+                  raise SystemExit(f"{label} is missing its SHA-256 verification entry.")
+          print("Gradle lock artifact and AAPT2 SHA-256 verification metadata are valid.")
+          PY
+
       - name: Generate application icons
         run: npm run tauri:icons --prefix web
 
@@ -190,6 +223,7 @@ jobs:
       - name: Build signed release APK (retry Maven Central HTTP 429)
         env:
           CARGO_NET_OFFLINE: "true"
+          MIORA_GRADLE_LOCKS_DIR: ${{ runner.temp }}/miora-gradle-lockfiles
         run: |
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-release-build-$attempt.log"
@@ -213,13 +247,24 @@ jobs:
 
       - name: Verify dependency lockfiles remained unchanged
         run: |
-          git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock web/android-gradle-locks
-          if [ -n "$(git status --porcelain -- web/android-gradle-locks)" ]; then
-            echo "::error::Committed Android Gradle lockfiles changed during the release build."
-            exit 1
-          fi
+          set -euo pipefail
+          git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
+
+          locks="$RUNNER_TEMP/miora-gradle-lockfiles"
           tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
-          cmp web/android-gradle-locks/external/tauri-android/gradle.lockfile "$tauri_android_dir/gradle.lockfile"
+          while IFS= read -r -d '' file; do
+            relative_path="${file#"$locks/"}"
+            if [ "$relative_path" = "external/tauri-android/gradle.lockfile" ]; then
+              destination="$tauri_android_dir/gradle.lockfile"
+            else
+              destination="web/src-tauri/gen/android/$relative_path"
+            fi
+            if [ ! -f "$destination" ]; then
+              echo "::error::Gradle lock artifact was not applied to the release build: $relative_path"
+              exit 1
+            fi
+            cmp "$file" "$destination"
+          done < <(find "$locks" -type f -print0 | sort -z)
 
       - name: Verify release APK signatures
         env:
