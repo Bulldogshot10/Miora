@@ -27,8 +27,8 @@ type LocalBleedingState = {
 };
 
 const BLEEDING_PRIOR = [0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01];
-const MIN_CYCLE_LENGTH = 21;
-const MAX_CYCLE_LENGTH = 45;
+const MIN_CYCLE_LENGTH = 15;
+const MAX_CYCLE_LENGTH = 60;
 const VALID_SYMPTOM_CODES = new Set([
   "cramps",
   "bloating",

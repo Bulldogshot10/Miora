@@ -2,9 +2,8 @@ use jiff::civil::Date as NaiveDate;
 
 use crate::domain::cycle::cycle_length_days;
 use crate::engine::bayesian::CycleLengthPosterior;
+use crate::engine::{MAX_CYCLE_LENGTH, MIN_CYCLE_LENGTH};
 
-const MIN_CYCLE_LENGTH: u32 = 21;
-const MAX_CYCLE_LENGTH: u32 = 45;
 const MIN_LUTEAL_LENGTH: u32 = 12;
 const MAX_LUTEAL_LENGTH: u32 = 16;
 const MIN_BLEEDING_DAYS: u32 = 1;
@@ -430,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn cycle_beyond_supported_range_is_uncertain_not_luteal() {
+    fn cycle_day_50_retains_probability_for_longer_supported_cycles() {
         let start = date(2026, 1, 1);
         let estimate = estimate_cycle_phase(&[start], &[], date(2026, 2, 19), None, None).unwrap();
 
@@ -438,6 +437,16 @@ mod tests {
         assert_eq!(estimate.phase, CyclePhase::Uncertain);
         assert!(estimate.probabilities.uncertain > 0.7);
         assert!(estimate.probabilities.uncertain < 1.0);
+    }
+
+    #[test]
+    fn cycle_beyond_supported_range_is_fully_uncertain() {
+        let start = date(2026, 1, 1);
+        let estimate = estimate_cycle_phase(&[start], &[], date(2026, 3, 6), None, None).unwrap();
+
+        assert_eq!(estimate.cycle_day, 65);
+        assert_eq!(estimate.phase, CyclePhase::Uncertain);
+        assert!((estimate.probabilities.uncertain - 1.0).abs() < 1e-9);
     }
 
     #[test]
