@@ -235,10 +235,10 @@ async function verifyGradleWrapper() {
   const stacktraceSetting = "org.gradle.logging.stacktrace=all";
   const stacktracePrefix = "org.gradle.logging.stacktrace=";
   const gradlePropertyLines = gradleProperties
-    .split(/\\r?\\n/)
+    .split(/\r?\n/)
     .filter((line) => !line.startsWith(stacktracePrefix));
   gradlePropertyLines.push(stacktraceSetting);
-  gradleProperties = gradlePropertyLines.join("\\n").trimEnd() + "\\n";
+  gradleProperties = gradlePropertyLines.join("\n").trimEnd() + "\n";
   await writeFile(gradlePropertiesPath, gradleProperties);
 }
 
