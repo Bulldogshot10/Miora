@@ -213,7 +213,7 @@ jobs:
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-gradle-lock-bootstrap-$attempt.log"
             set +e
-            ./gradlew --configuration-cache --write-locks --write-verification-metadata sha256 :dependencies :app:dependencies :app:assembleUniversalRelease >"$log_file" 2>&1
+            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 --init-script "$GITHUB_WORKSPACE/.github/scripts/resolve-android-aapt2.init.gradle" :dependencies :app:dependencies :app:packageUniversalReleaseResources >"$log_file" 2>&1
             status=$?
             set -e
             cat "$log_file"
@@ -256,14 +256,15 @@ jobs:
           component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
           if component is None:
               raise SystemExit("AAPT2 is missing from Gradle dependency verification metadata.")
-          pom = next(
-              (item for item in component.findall("./{*}artifact")
-               if item.get("name", "").endswith(".pom")),
-              None,
-          )
-          if pom is None or not pom.findall("./{*}sha256"):
-              raise SystemExit("AAPT2 POM has no SHA-256 verification entry.")
-          print("AAPT2 POM SHA-256 is present in Gradle verification metadata.")
+          artifacts = component.findall("./{*}artifact")
+          required_artifacts = {
+              "POM": next((item for item in artifacts if item.get("name", "").endswith(".pom")), None),
+              "Linux binary JAR": next((item for item in artifacts if item.get("name", "").endswith("-linux.jar")), None),
+          }
+          for label, artifact in required_artifacts.items():
+              if artifact is None or not artifact.findall("./{*}sha256"):
+                  raise SystemExit(f"AAPT2 {label} is missing its SHA-256 verification entry.")
+          print("AAPT2 POM and Linux binary JAR SHA-256 entries are present.")
           PY
 
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles"
