@@ -33,8 +33,8 @@ impl Database {
         }
 
         let connection = Connection::open(path)?;
-        apply_key(&connection, key_hex.as_str())?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        apply_key(&connection, key_hex.as_str())?;
         connection.execute_batch(
             "
             PRAGMA cipher_memory_security = ON;
@@ -122,12 +122,24 @@ fn migrate_plaintext_database(
         // Flush the old plaintext WAL and close the journal before exporting.
         let source = Connection::open(path)?;
         source.busy_timeout(std::time::Duration::from_secs(5))?;
-        source.execute_batch(
-            "
-            PRAGMA wal_checkpoint(TRUNCATE);
-            PRAGMA journal_mode = DELETE;
-            ",
+        let checkpoint: (i32, i32, i32) = source.query_row(
+            "PRAGMA wal_checkpoint(TRUNCATE)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
+        if checkpoint.0 != 0 || (checkpoint.1 >= 0 && checkpoint.2 < checkpoint.1) {
+            return Err("Could not fully checkpoint the plaintext database WAL before encryption.".into());
+        }
+
+        let journal_mode: String = source.query_row(
+            "PRAGMA journal_mode = DELETE",
+            [],
+            |row| row.get(0),
+        )?;
+        if !journal_mode.eq_ignore_ascii_case("delete") {
+            return Err("Could not switch the plaintext database to DELETE journaling before encryption.".into());
+        }
+
         let source_user_version: i32 =
             source.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
@@ -185,8 +197,9 @@ fn migrate_plaintext_database(
         }
         drop(encrypted);
 
-        std::fs::rename(&temporary_path, path)?;
-
+        // The source is fully checkpointed and closed. Remove its old
+        // sidecars before swapping files so a crash cannot leave a plaintext
+        // WAL next to the newly encrypted database.
         for suffix in ["-wal", "-shm"] {
             let mut sidecar = OsString::from(path.as_os_str());
             sidecar.push(suffix);
@@ -195,6 +208,8 @@ fn migrate_plaintext_database(
                 std::fs::remove_file(sidecar)?;
             }
         }
+
+        std::fs::rename(&temporary_path, path)?;
 
         Ok(())
     })();

@@ -26,7 +26,24 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         manager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        appWidgetIds.forEach { updateWidget(context, manager, it) }
+        val appContext = context.applicationContext
+        val pendingResult = goAsync()
+        worker.execute {
+            try {
+                val data = readWidgetData(appContext)
+                appWidgetIds.forEach { widgetId ->
+                    updateWidget(appContext, manager, widgetId, data)
+                }
+            } catch (_: Exception) {
+                appWidgetIds.forEach { widgetId ->
+                    preferences(appContext, widgetId).edit()
+                        .putString(key("status", widgetId), "Open Miora and try refreshing the widget.")
+                        .apply()
+                }
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -114,12 +131,17 @@ open class MioraWidgetProvider : AppWidgetProvider() {
     private fun updateAllWidgets(context: Context) {
         val manager = AppWidgetManager.getInstance(context)
         val ids = manager.getAppWidgetIds(ComponentName(context, MioraWidgetProvider::class.java))
-        ids.forEach { updateWidget(context, manager, it) }
+        val data = readWidgetData(context)
+        ids.forEach { updateWidget(context, manager, it, data) }
     }
 
-    private fun updateWidget(context: Context, manager: AppWidgetManager, widgetId: Int) {
+    private fun updateWidget(
+        context: Context,
+        manager: AppWidgetManager,
+        widgetId: Int,
+        data: WidgetData,
+    ) {
         val views = RemoteViews(context.packageName, R.layout.miora_daily_checkin_widget)
-        val data = readWidgetData(context)
         val prefs = preferences(context, widgetId)
         val state = visibleState(context, widgetId, data.checkin, data.ready)
         val hasDraft = prefs.getBoolean(key("draft", widgetId), false)

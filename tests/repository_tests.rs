@@ -355,3 +355,65 @@ fn concurrent_legacy_database_opens_serialize_sqlcipher_migration() {
         let _ = std::fs::remove_file(PathBuf::from(sidecar));
     }
 }
+
+
+#[test]
+fn migration_refuses_to_replace_plaintext_database_when_wal_checkpoint_is_busy() {
+    let path = temporary_database_path();
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch(
+            "
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE period_starts (
+                start_date TEXT NOT NULL UNIQUE
+            );
+            INSERT INTO period_starts (start_date) VALUES ('2026-11-01');
+            ",
+        ).unwrap();
+    }
+
+    let reader = Connection::open(&path).unwrap();
+    reader.execute_batch("BEGIN;").unwrap();
+    let initial_count: i64 = reader
+        .query_row("SELECT COUNT(*) FROM period_starts", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(initial_count, 1);
+
+    {
+        let writer = Connection::open(&path).unwrap();
+        writer.execute(
+            "INSERT INTO period_starts (start_date) VALUES ('2026-11-29')",
+            [],
+        ).unwrap();
+    }
+
+    assert!(
+        Repository::open(&path, &[0xA5; 32]).is_err(),
+        "a busy WAL checkpoint must abort migration instead of replacing the source database"
+    );
+
+    let raw = Connection::open(&path).unwrap();
+    let preserved_count: i64 = raw
+        .query_row("SELECT COUNT(*) FROM period_starts", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(preserved_count, 2);
+    drop(raw);
+
+    reader.execute_batch("ROLLBACK;").unwrap();
+    drop(reader);
+
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    assert_eq!(
+        repository.period_start_dates().unwrap(),
+        vec![date(2026, 11, 1), date(2026, 11, 29)]
+    );
+    drop(repository);
+
+    let _ = std::fs::remove_file(&path);
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = path.as_os_str().to_os_string();
+        sidecar.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(sidecar));
+    }
+}
