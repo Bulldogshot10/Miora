@@ -108,6 +108,8 @@ The native dashboard returns integer-day P10/P50/P90 predictive quantiles. The m
 
 The browser-only localStorage preview retains its development fallback estimator; the production Android/Tauri application uses the Rust inference engine. The browser fallback is not numerically equivalent to the native Rust predictor.
 
+Cycle-phase classification is currently a separate discrete Dirichlet-categorical model over cycle lengths with a uniform 12–16 day luteal-length assumption. It does not consume the BOCPD/survival predictive distribution, and calendar data alone does not confirm ovulation. Treat the phase distribution and next-period forecast as related but distinct model outputs.
+
 ## Rust checks
 
 From the repository root:

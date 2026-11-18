@@ -92,6 +92,13 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             .getAppWidgetIds(ComponentName(context, MioraWidgetProvider::class.java))
         if (widgetId !in installedIds) return
 
+        // A launcher can retain an old PendingIntent across midnight. Never let a
+        // click rendered for yesterday mutate today's check-in.
+        if (intent.getStringExtra(EXTRA_DATE) != todayIso()) {
+            updateAllWidgets(context)
+            return
+        }
+
         val data = readWidgetData(context)
         if (!data.ready) {
             preferences(context, widgetId).edit()
@@ -481,6 +488,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             data = Uri.parse("miora-widget://" + widgetId + "/" + actionName + "/" + value)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(EXTRA_VALUE, value)
+            putExtra(EXTRA_DATE, todayIso())
         }
         val requestCode = (widgetId.toString() + actionName + value).hashCode()
         return PendingIntent.getBroadcast(
@@ -528,6 +536,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         private const val ACTION_CYCLE_SYMPTOM = "miora.widget.CYCLE_SYMPTOM"
         private const val ACTION_SAVE = "miora.widget.SAVE"
         private const val EXTRA_VALUE = "miora.widget.VALUE"
+        private const val EXTRA_DATE = "miora.widget.DATE"
         private const val PREFERENCES = "miora_widget_state"
         private val SYMPTOM_CODES = setOf("cramps", "bloating", "headache", "fatigue", "mood_changes")
         private val worker = Executors.newSingleThreadExecutor()
