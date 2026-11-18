@@ -306,7 +306,7 @@ fn migration_imports_legacy_period_starts() {
         .unwrap()
         .read_exact(&mut header)
         .unwrap();
-    assert_ne!(&header, b"SQLite format 3\0");
+    assert_ne!(header, PLAINTEXT_SQLITE_HEADER);
 
     let _ = std::fs::remove_file(path);
 }
@@ -350,7 +350,7 @@ fn concurrent_legacy_database_opens_serialize_sqlcipher_migration() {
         .unwrap()
         .read_exact(&mut header)
         .unwrap();
-    assert_ne!(&header, b"SQLite format 3\\0");
+    assert_ne!(header, PLAINTEXT_SQLITE_HEADER);
 
     let _ = std::fs::remove_file(&path);
     for suffix in ["-wal", "-shm"] {
