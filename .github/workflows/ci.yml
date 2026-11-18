@@ -202,6 +202,25 @@ jobs:
             sleep "$((attempt * 20))"
           done
 
+      - name: Verify debug APK exists
+        run: |
+          apks="$(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')"
+          if [ -z "$apks" ]; then
+            echo "::error::Android build completed without producing an APK."
+            exit 1
+          fi
+          while IFS= read -r apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
+          done <<< "$apks"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: miora-debug-apk
+          path: web/src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Resolve Android Gradle locks and SHA-256 verification metadata
         if: ${{ hashFiles('web/android-gradle-locks/**') == '' }}
         env:
@@ -213,7 +232,8 @@ jobs:
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-gradle-lock-bootstrap-$attempt.log"
             set +e
-            ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 --init-script "$GITHUB_WORKSPACE/.github/scripts/resolve-android-aapt2.init.gradle" :dependencies :app:dependencies :app:packageUniversalReleaseResources --stacktrace >"$log_file" 2>&1
+            ./gradlew :app:clean :tauri-android:clean --stacktrace
+          ./gradlew --no-configuration-cache --write-locks --write-verification-metadata sha256 --init-script "$GITHUB_WORKSPACE/.github/scripts/resolve-android-aapt2.init.gradle" :dependencies :app:dependencies :app:packageUniversalReleaseResources --stacktrace >"$log_file" 2>&1
             status=$?
             set -e
             cat "$log_file"
@@ -288,24 +308,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Verify debug APK exists
-        run: |
-          apks="$(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')"
-          if [ -z "$apks" ]; then
-            echo "::error::Android build completed without producing an APK."
-            exit 1
-          fi
-          while IFS= read -r apk; do
-            "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
-          done <<< "$apks"
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: miora-debug-apk
-          path: web/src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Configure ephemeral Android release signing
         run: |

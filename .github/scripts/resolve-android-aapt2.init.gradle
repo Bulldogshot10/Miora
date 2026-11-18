@@ -1,21 +1,16 @@
 import java.util.Properties
 
-// This init script is also loaded by Gradle's separate buildSrc build.
-// Scope it to the generated Tauri Android root build only.
-gradle.settingsEvaluated { settings ->
-    if (settings.rootProject.name != "android") {
+// Init scripts run for auxiliary builds such as buildSrc as well.
+// Only the generated Android build owns an :app project; skip auxiliary builds.
+gradle.projectsEvaluated {
+    def appProject = gradle.rootProject.findProject(":app")
+    if (appProject == null) {
+        println(
+            "Skipping Miora AAPT2 verification for auxiliary Gradle build: " +
+            gradle.rootProject.projectDir
+        )
         return
     }
-
-    gradle.projectsEvaluated {
-        def appProject = gradle.rootProject.findProject(":app")
-        if (appProject == null) {
-            throw new GradleException(
-                "The generated Android root build does not contain :app. " +
-                "Root project: ${gradle.rootProject.name}; " +
-                "projects: ${gradle.rootProject.allprojects.collect { it.path }.sort()}"
-            )
-        }
 
         // Mirror AGP's own Aapt2MavenUtils coordinate construction. Read both
         // the plugin version and its bundled AAPT2 build number from AGP itself.
