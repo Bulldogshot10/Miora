@@ -300,6 +300,29 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 await verifyGradleWrapper();
 
 let gradle = await readFile(gradlePath, "utf8");
+
+function pinAndroidSdkLevel(source, property) {
+  const expression = new RegExp("\\b" + property + "\\s*=\\s*(\\d+)");
+  const match = source.match(expression);
+  if (!match) {
+    throw new Error("Could not find generated Android " + property + " declaration.");
+  }
+
+  const current = Number(match[1]);
+  if (current !== 36 && current !== 37) {
+    throw new Error(
+      "Unexpected Tauri Android " + property + " " + current +
+      "; review the template before changing the stable SDK pin.",
+    );
+  }
+
+  return source.replace(expression, property + " = 36");
+}
+
+// Android 17 / API 37 is still a pre-release SDK. Compile and target the latest
+// stable platform (Android 16 / API 36) until API 37 reaches the stable channel.
+gradle = pinAndroidSdkLevel(gradle, "compileSdk");
+gradle = pinAndroidSdkLevel(gradle, "targetSdk");
 gradle = gradle.replace(
   /manifestPlaceholders\["usesCleartextTraffic"\]\s*=\s*"?true"?/g,
   'manifestPlaceholders["usesCleartextTraffic"] = "false"',
