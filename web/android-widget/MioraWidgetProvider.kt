@@ -5,10 +5,12 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.widget.RemoteViews
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -252,13 +254,23 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         )
     }
 
+    private fun logWidgetDatabaseAccess(context: Context, event: String) {
+        if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            Log.d("MioraWidget", event)
+        }
+    }
+
     private fun readWidgetData(context: Context): WidgetData {
         val database = databaseFile(context)
-        if (!database.isFile) return WidgetData(false, null)
+        if (!database.isFile) {
+            logWidgetDatabaseAccess(context, "encrypted_database_missing")
+            return WidgetData(false, null)
+        }
 
         return try {
             initializeDatabaseKey(context)
             val checkin = widgetGetDailyCheckin(database.absolutePath, todayIso())
+            logWidgetDatabaseAccess(context, "encrypted_database_read_ok")
             val state = checkin?.let {
                 WidgetState(
                     mood = it.moodScore,
@@ -270,6 +282,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             }
             WidgetData(true, state)
         } catch (_: Exception) {
+            logWidgetDatabaseAccess(context, "encrypted_database_read_failed")
             WidgetData(false, null)
         }
     }

@@ -523,8 +523,11 @@ impl Repository {
     pub fn export_backup_snapshot(
         &self,
     ) -> Result<(Vec<PeriodBackupRecord>, Vec<DailyCheckinBackupRecord>), Box<dyn std::error::Error>> {
+        // Keep every exported table on one WAL snapshot while the widget can
+        // write through its own SQLite connection.
+        let transaction = self.database.connection().unchecked_transaction()?;
         let periods = {
-            let mut statement = self.database.connection().prepare(
+            let mut statement = transaction.prepare(
                 "
                 SELECT start_date, end_date, flow_intensity,
                        last_bleeding_observation, bleeding_end_confirmed
@@ -558,7 +561,7 @@ impl Repository {
         };
 
         let checkin_dates = {
-            let mut statement = self.database.connection().prepare(
+            let mut statement = transaction.prepare(
                 "SELECT checkin_date FROM daily_checkins ORDER BY checkin_date ASC",
             )?;
             let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
@@ -582,6 +585,7 @@ impl Repository {
             });
         }
 
+        transaction.commit()?;
         Ok((periods, checkins))
     }
 

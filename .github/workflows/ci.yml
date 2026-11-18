@@ -95,6 +95,9 @@ jobs:
       - name: Check Svelte and TypeScript
         run: npm run check --prefix web
 
+      - name: Test encrypted backup crypto
+        run: npm run test:backup --prefix web
+
       - name: Build Web frontend
         run: npm run build --prefix web
 
@@ -277,7 +280,7 @@ jobs:
 
           booted=""
           for attempt in $(seq 1 120); do
-            booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')"
+            booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
             if [ "$booted" = "1" ]; then break; fi
             sleep 5
           done
@@ -294,7 +297,7 @@ jobs:
           adb shell monkey -p "$package" 1
           launched=""
           for attempt in $(seq 1 30); do
-            launched="$(adb shell pidof "$package" 2>/dev/null | tr -d '\\r')"
+            launched="$(adb shell pidof "$package" 2>/dev/null | tr -d '\r')"
             if [ -n "$launched" ]; then break; fi
             sleep 2
           done
@@ -304,11 +307,33 @@ jobs:
             exit 1
           fi
 
+          # Give the first launch time to create the encrypted database/key.
+          sleep 8
           adb shell am force-stop "$package"
+          adb logcat -c
+          adb shell am broadcast \
+            -a android.appwidget.action.APPWIDGET_UPDATE \
+            -n "$package/$package.MioraWidgetProvider" \
+            --eia appWidgetIds 1
+          sleep 5
+          widget_read="$(adb logcat -d -s MioraWidget:D | grep -F "encrypted_database_read_ok" || true)"
+          if [ -z "$widget_read" ]; then
+            adb logcat -d -t 4000
+            echo "::error::The widget process could not reopen the Keystore-protected SQLCipher database."
+            exit 1
+          fi
+
+          widget_registration="$(adb shell dumpsys package "$package" | grep -F "MioraWidgetProvider" || true)"
+          if [ -z "$widget_registration" ]; then
+            adb logcat -d -t 4000
+            echo "::error::Miora widget provider is not registered in the installed package."
+            exit 1
+          fi
+
           adb shell monkey -p "$package" 1
           relaunched=""
           for attempt in $(seq 1 30); do
-            relaunched="$(adb shell pidof "$package" 2>/dev/null | tr -d '\\r')"
+            relaunched="$(adb shell pidof "$package" 2>/dev/null | tr -d '\r')"
             if [ -n "$relaunched" ]; then break; fi
             sleep 2
           done
@@ -318,20 +343,9 @@ jobs:
             exit 1
           fi
 
-          adb shell am broadcast \
-            -a android.appwidget.action.APPWIDGET_UPDATE \
-            -n "$package/$package.MioraWidgetProvider" \
-            --eia appWidgetIds 1
-          sleep 5
-          widget_registration="$(adb shell dumpsys package "$package" | grep -F "MioraWidgetProvider" || true)"
-          if [ -z "$widget_registration" ]; then
-            adb logcat -d -t 4000
-            echo "::error::Miora widget provider is not registered in the installed package."
-            exit 1
-          fi
           fatal_logs="$(adb logcat -d -t 4000 | grep -E 'FATAL EXCEPTION|Fatal signal [0-9]+' || true)"
           if [ -n "$fatal_logs" ]; then
-            printf '%s\\n' "$fatal_logs"
+            printf '%s\n' "$fatal_logs"
             echo "::error::Miora crashed during app or widget runtime smoke tests."
             exit 1
           fi

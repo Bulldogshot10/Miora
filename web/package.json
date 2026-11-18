@@ -14,7 +14,8 @@
     "tauri:android:build": "npm run tauri:android:prepare && tauri android build --apk --debug --target aarch64",
     "tauri:android:release": "node scripts/prepare-android-widget.mjs --release && (cd src-tauri/gen/android && ./gradlew clean :app:clean :tauri-android:clean --stacktrace) && tauri android build --apk --target aarch64",
     "tauri:android:prepare": "node scripts/prepare-android-widget.mjs",
-    "tauri:android:dev": "adb reverse tcp:5173 tcp:5173 && adb reverse tcp:5174 tcp:5174 && tauri android dev"
+    "tauri:android:dev": "adb reverse tcp:5173 tcp:5173 && adb reverse tcp:5174 tcp:5174 && tauri android dev",
+    "test:backup": "node scripts/test-backup-crypto.mjs"
   },
   "dependencies": {
     "@lucide/svelte": "^1.73.0",
