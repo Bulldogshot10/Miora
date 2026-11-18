@@ -227,26 +227,39 @@ jobs:
             fi
             sleep "$((attempt * 20))"
           done
-          test -s gradle.lockfile
-          test -s buildscript-gradle.lockfile
-          test -s app/gradle.lockfile
-          test -s buildSrc/gradle.lockfile
-          test -s gradle/verification-metadata.xml
+
+          regular_lock_count="$(find . -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
+          buildscript_lock_count="$(find . -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
+          verification_count="$(find . -type f -name 'verification-metadata.xml' | wc -l | tr -d ' ')"
+          echo "Generated project lockfiles: $regular_lock_count"
+          echo "Generated buildscript lockfiles: $buildscript_lock_count"
+          echo "Generated verification metadata files: $verification_count"
+          find . -type f \( -name 'gradle.lockfile' -o -name 'buildscript-gradle.lockfile' -o -name 'verification-metadata.xml' \) -print | sort
+
+          if [ "$regular_lock_count" -lt 3 ] || [ "$buildscript_lock_count" -lt 2 ]; then
+            echo "::error::Gradle did not generate the complete project/buildscript lock state."
+            exit 1
+          fi
+          if [ "$verification_count" -lt 1 ]; then
+            echo "::error::Gradle did not generate dependency verification metadata."
+            exit 1
+          fi
+
           mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles"
-          cp gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/"
-          cp buildscript-gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/"
-          mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/app"
-          cp app/gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/app/"
-          mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/buildSrc"
-          cp buildSrc/gradle.lockfile "$RUNNER_TEMP/miora-gradle-lockfiles/buildSrc/"
-          mkdir -p "$RUNNER_TEMP/miora-gradle-lockfiles/gradle"
-          cp gradle/verification-metadata.xml "$RUNNER_TEMP/miora-gradle-lockfiles/gradle/"
+          while IFS= read -r -d '' file; do
+            relative_path="$(printf '%s' "$file" | sed 's#^\./##')"
+            destination="$RUNNER_TEMP/miora-gradle-lockfiles/$relative_path"
+            mkdir -p "$(dirname "$destination")"
+            cp "$file" "$destination"
+          done < <(
+            find . -type f \( -name 'gradle.lockfile' -o -name 'buildscript-gradle.lockfile' -o -name 'verification-metadata.xml' \) -print0 | sort -z
+          )
 
       - name: Upload bootstrapped Gradle lockfiles
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: miora-android-gradle-lockfiles
-          path: ${{ runner.temp }}/miora-gradle-lockfiles/**
+          path: ${{ runner.temp }}/miora-gradle-lockfiles
           if-no-files-found: error
           retention-days: 7
 
