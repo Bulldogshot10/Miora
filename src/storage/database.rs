@@ -122,22 +122,23 @@ fn migrate_plaintext_database(
         // Flush the old plaintext WAL and close the journal before exporting.
         let source = Connection::open(path)?;
         source.busy_timeout(std::time::Duration::from_secs(5))?;
-        let checkpoint: (i32, i32, i32) = source.query_row(
-            "PRAGMA wal_checkpoint(TRUNCATE)",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
+        let checkpoint: (i32, i32, i32) =
+            source.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?;
         if checkpoint.0 != 0 || (checkpoint.1 >= 0 && checkpoint.2 < checkpoint.1) {
-            return Err("Could not fully checkpoint the plaintext database WAL before encryption.".into());
+            return Err(
+                "Could not fully checkpoint the plaintext database WAL before encryption.".into(),
+            );
         }
 
-        let journal_mode: String = source.query_row(
-            "PRAGMA journal_mode = DELETE",
-            [],
-            |row| row.get(0),
-        )?;
+        let journal_mode: String =
+            source.query_row("PRAGMA journal_mode = DELETE", [], |row| row.get(0))?;
         if !journal_mode.eq_ignore_ascii_case("delete") {
-            return Err("Could not switch the plaintext database to DELETE journaling before encryption.".into());
+            return Err(
+                "Could not switch the plaintext database to DELETE journaling before encryption."
+                    .into(),
+            );
         }
 
         let source_user_version: i32 =

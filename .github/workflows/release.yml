@@ -11,7 +11,7 @@ permissions:
 jobs:
   android-release:
     name: Build signed Android release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -31,12 +31,12 @@ jobs:
             patchelf
 
       - name: Install Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.23.4"
 
       - name: Set up Java
-        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "17.0.21+9"
@@ -45,9 +45,11 @@ jobs:
             web/package-lock.json
             web/src-tauri/tauri.conf.json
             web/src-tauri/Cargo.lock
+            web/android-gradle-locks/**
+            web/scripts/prepare-android-widget.mjs
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
 
@@ -76,14 +78,35 @@ jobs:
 
       - name: Verify and prefetch committed lockfiles
         run: |
+          set -euo pipefail
           test -s Cargo.lock
           test -s web/package-lock.json
           test -s web/src-tauri/Cargo.lock
+          test -s web/android-gradle-locks/gradle/verification-metadata.xml
+          test -s web/android-gradle-locks/external/tauri-android/gradle.lockfile
+          regular_lock_count="$(find web/android-gradle-locks -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
+          buildscript_lock_count="$(find web/android-gradle-locks -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
+          test "$regular_lock_count" -ge 3
+          test "$buildscript_lock_count" -ge 2
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("web/android-gradle-locks/gradle/verification-metadata.xml").getroot()
+          component = root.find(".//{*}component[@group='com.android.tools.build'][@name='aapt2']")
+          if component is None:
+              raise SystemExit("Committed Gradle verification metadata does not contain AAPT2.")
+          pom = next(
+              (item for item in component.findall("./{*}artifact")
+               if item.get("name", "").endswith(".pom")),
+              None,
+          )
+          if pom is None or not pom.findall("./{*}sha256"):
+              raise SystemExit("Committed AAPT2 POM metadata is missing its SHA-256.")
+          PY
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        run: cargo install cargo-audit --version 0.23.0 --locked
 
       - name: Audit Rust dependencies
         run: |
@@ -108,7 +131,9 @@ jobs:
           if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
               raise SystemExit(f"Invalid Android release tag: {tag!r}; expected vMAJOR.MINOR.PATCH[-prerelease].")
 
-          version_code = int(os.environ["RELEASE_VERSION_CODE"])
+          # Tauri 0.3.0 currently maps to Android versionCode 3000.
+          # Offset the monotonically increasing release run number above that baseline.
+          version_code = 3_000 + int(os.environ["RELEASE_VERSION_CODE"])
           if not 1 <= version_code <= 2_100_000_000:
               raise SystemExit(f"Android version code is outside the supported range: {version_code}")
 
@@ -138,67 +163,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
         run: |
+          set -euo pipefail
           STORE_PASSWORD="${ANDROID_KEY_STORE_PASSWORD:-$ANDROID_KEY_PASSWORD}"
           if [ -z "$ANDROID_KEY_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$STORE_PASSWORD" ]; then
             echo "::error::Configure ANDROID_KEY_BASE64, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, and optionally ANDROID_KEY_STORE_PASSWORD."
             exit 1
           fi
 
-          cd web/src-tauri/gen/android
+          umask 077
           printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/miora-release.jks"
-          {
-            echo "keyAlias=$ANDROID_KEY_ALIAS"
-            echo "keyPassword=$ANDROID_KEY_PASSWORD"
-            echo "storePassword=$STORE_PASSWORD"
-            echo "storeFile=$RUNNER_TEMP/miora-release.jks"
-          } > keystore.properties
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          gradle_file = Path("app/build.gradle.kts")
-          source = gradle_file.read_text()
-
-          if "import java.io.FileInputStream" not in source:
-              source = "import java.io.FileInputStream\nimport java.util.Properties\n\n" + source
-
-          signing_block = '''
-          signingConfigs {
-              create("release") {
-                  val keystorePropertiesFile = rootProject.file("keystore.properties")
-                  val keystoreProperties = Properties()
-                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-                  keyAlias = keystoreProperties["keyAlias"] as String
-                  keyPassword = keystoreProperties["keyPassword"] as String
-                  storeFile = file(keystoreProperties["storeFile"] as String)
-                  storePassword = keystoreProperties["storePassword"] as String
-              }
-          }
-
-          '''
-
-          if 'create("release")' not in source:
-              if "buildTypes {" not in source:
-                  raise SystemExit("Could not find the Gradle buildTypes block; refusing to create an unsigned release.")
-              source = source.replace("buildTypes {", signing_block + "buildTypes {", 1)
-
-          release_marker = 'getByName("release") {'
-          if release_marker not in source:
-              raise SystemExit("Could not find the release build type; refusing to create an unsigned release.")
-
-          signing_line = 'signingConfig = signingConfigs.getByName("release")'
-          if signing_line not in source:
-              source = source.replace(
-                  release_marker,
-                  release_marker + '\n            ' + signing_line,
-                  1
-              )
-
-          if signing_line not in source or 'create("release")' not in source:
-              raise SystemExit("Release signing config was not applied.")
-
-          gradle_file.write_text(source)
-          PY
+          ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/miora-release.jks"
+          export ANDROID_KEYSTORE_PATH
+          python3 web/scripts/configure-android-signing.py
 
       - name: Build signed release APK (retry Maven Central HTTP 429)
         env:
@@ -224,12 +200,23 @@ jobs:
             sleep "$((attempt * 20))"
           done
 
+      - name: Verify dependency lockfiles remained unchanged
+        run: |
+          git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock web/android-gradle-locks
+          if [ -n "$(git status --porcelain -- web/android-gradle-locks)" ]; then
+            echo "::error::Committed Android Gradle lockfiles changed during the release build."
+            exit 1
+          fi
+          tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
+          cmp web/android-gradle-locks/external/tauri-android/gradle.lockfile "$tauri_android_dir/gradle.lockfile"
+
       - name: Verify release APK signatures
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_VERSION_CODE: ${{ github.run_number }}
         run: |
           expected_version="${RELEASE_TAG#v}"
+          expected_version_code=$((3000 + RELEASE_VERSION_CODE))
           mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
           if [ "${#apks[@]}" -eq 0 ]; then
             echo "::error::No release APK was produced."
@@ -241,8 +228,12 @@ jobs:
 
           for apk in "${apks[@]}"; do
             badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")
-            if ! grep -Fq "versionCode='$RELEASE_VERSION_CODE'" <<< "$badging"; then
-              echo "::error::APK versionCode does not match workflow run number $RELEASE_VERSION_CODE."
+            if ! grep -Fq "package: name='com.bulldogshot10.miora'" <<< "$badging"; then
+              echo "::error::APK package identifier does not match com.bulldogshot10.miora."
+              exit 1
+            fi
+            if ! grep -Fq "versionCode='$expected_version_code'" <<< "$badging"; then
+              echo "::error::APK versionCode does not match expected value $expected_version_code."
               exit 1
             fi
             if ! grep -Fq "versionName='$expected_version'" <<< "$badging"; then
@@ -264,7 +255,7 @@ jobs:
             | xargs -0 sha256sum > web/src-tauri/gen/android/app/build/outputs/apk/SHA256SUMS.txt
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@28ab305d0ffa26d60ec4bd614126329e26c7a0ec # v3.0.4
         with:
           generate_release_notes: true
           files: |
@@ -273,3 +264,4 @@ jobs:
             Cargo.lock
             web/package-lock.json
             web/src-tauri/Cargo.lock
+            web/scripts/prepare-android-widget.mjs

@@ -249,13 +249,16 @@ function makePhaseEstimate(
   const bleedDistribution = confirmedCurrentBleedingDays !== null
     ? new Map([[Math.max(1, confirmedCurrentBleedingDays), 1]])
     : bleedingDistribution(bleedingDurations);
+  const expectedCycleLength = intervals.length > 0
+    ? [...cycleDistribution.entries()].reduce((sum, [day, probability]) => sum + day * probability, 0)
+    : 0;
 
   if (observedBleedingThroughDay !== null && cycleDay <= observedBleedingThroughDay) {
     return {
       code: "menstrual",
       label: "Menstrual phase",
       cycleDay,
-      estimatedCycleLength: 0,
+      estimatedCycleLength: Math.round(expectedCycleLength),
       completedIntervalsUsed: intervals.length,
       completedBleedingDurationsUsed: bleedingDurations.length,
       confidence: 1,
@@ -315,10 +318,6 @@ function makePhaseEstimate(
   const mostLikely = candidates.reduce((best, candidate) => candidate[1] >= best[1] ? candidate : best);
   const confidence = mostLikely[1];
   const learning = confidence < 0.55;
-  const expectedCycleLength = intervals.length > 0
-    ? [...cycleDistribution.entries()].reduce((sum, [day, probability]) => sum + day * probability, 0)
-    : 0;
-
   return {
     code: learning ? "learning" : mostLikely[2],
     label: learning ? "Still learning your cycle" : mostLikely[3],
@@ -494,6 +493,7 @@ export async function logPeriodStart(
 
   const starts = readStoredDates();
   const ends = readPeriodEnds();
+  const states = readBleedingStates();
   const overlapsPrevious = starts.some((start) => start < date && ends[start] && ends[start] >= date);
   if (overlapsPrevious) {
     throw new Error("The new period start overlaps a previously recorded bleeding interval.");
@@ -503,6 +503,13 @@ export async function logPeriodStart(
     if (!isIsoDate(endDate)) throw new Error("Choose a valid last bleeding date.");
     if (endDate < date) throw new Error("The last bleeding day must be on or after the first day.");
     if (endDate > today) throw new Error("The last bleeding day cannot be in the future.");
+    const previousObservation = [states[date]?.lastObservation, ends[date]]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1);
+    if (previousObservation && endDate < previousObservation) {
+      throw new Error("The last bleeding day cannot be earlier than a previously recorded bleeding observation.");
+    }
     const nextStart = starts.find((start) => start > date);
     if (nextStart && endDate >= nextStart) {
       throw new Error("The last bleeding day must be before the next recorded period start.");
@@ -518,7 +525,6 @@ export async function logPeriodStart(
   if (endDate) {
     ends[date] = endDate;
     localStorage.setItem(PERIOD_END_STORAGE_KEY, JSON.stringify(ends));
-    const states = readBleedingStates();
     states[date] = { lastObservation: endDate, endDate, confirmed: true };
     localStorage.setItem(BLEEDING_STATE_KEY, JSON.stringify(states));
   }

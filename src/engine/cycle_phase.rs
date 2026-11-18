@@ -200,22 +200,28 @@ pub fn estimate_cycle_phase(
     let bleeding_history_available =
         confirmed_current_bleeding_days.is_some() || !completed_bleeding_durations.is_empty();
 
+    let mut cycle_posterior =
+        CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.02);
+    for length in &observed_cycle_lengths {
+        cycle_posterior.observe(*length);
+    }
+    let expected_cycle_length = if observed_cycle_lengths.is_empty() {
+        0
+    } else {
+        cycle_posterior.expected_length().round() as u32
+    };
+
     if let Some(observed_day) = observed_bleeding_through_day
         && cycle_day <= observed_day
     {
         return Some(fixed_menstrual_estimate(
             cycle_day,
+            expected_cycle_length,
             cycle_history_available,
             bleeding_history_available,
             observed_cycle_lengths.len(),
             completed_bleeding_durations.len(),
         ));
-    }
-
-    let mut cycle_posterior =
-        CycleLengthPosterior::with_prior(MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH, 0.02);
-    for length in &observed_cycle_lengths {
-        cycle_posterior.observe(*length);
     }
 
     let bleeding_posterior = estimate_bleeding_duration(completed_bleeding_durations);
@@ -285,11 +291,6 @@ pub fn estimate_cycle_phase(
         most_likely_phase
     };
 
-    let expected_cycle_length = if observed_cycle_lengths.is_empty() {
-        0
-    } else {
-        cycle_posterior.expected_length().round() as u32
-    };
     let is_personalized = cycle_history_available || bleeding_history_available;
 
     Some(CyclePhaseEstimate {
@@ -308,6 +309,7 @@ pub fn estimate_cycle_phase(
 
 fn fixed_menstrual_estimate(
     cycle_day: u32,
+    estimated_cycle_length: u32,
     cycle_history_available: bool,
     bleeding_history_available: bool,
     completed_intervals_used: usize,
@@ -316,7 +318,7 @@ fn fixed_menstrual_estimate(
     CyclePhaseEstimate {
         phase: CyclePhase::Menstrual,
         cycle_day,
-        estimated_cycle_length: 0,
+        estimated_cycle_length,
         completed_intervals_used,
         completed_bleeding_durations_used,
         confidence: 1.0,
@@ -381,6 +383,18 @@ mod tests {
 
         assert_eq!(estimate.phase, CyclePhase::Menstrual);
         assert_eq!(estimate.confidence, 1.0);
+    }
+
+    #[test]
+    fn active_bleeding_observation_preserves_personal_cycle_length_estimate() {
+        let starts = [date(2026, 1, 1), date(2026, 1, 29), date(2026, 2, 26)];
+        let estimate =
+            estimate_cycle_phase(&starts, &[5, 5], date(2026, 3, 2), None, Some(5)).unwrap();
+
+        assert_eq!(estimate.phase, CyclePhase::Menstrual);
+        assert_eq!(estimate.completed_intervals_used, 2);
+        assert!(estimate.cycle_history_available);
+        assert!((MIN_CYCLE_LENGTH..=MAX_CYCLE_LENGTH).contains(&estimate.estimated_cycle_length));
     }
 
     #[test]
