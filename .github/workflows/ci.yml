@@ -202,6 +202,7 @@ jobs:
           done
 
       - name: Resolve Android Gradle locks and SHA-256 verification metadata
+        if: ${{ hashFiles('web/android-gradle-locks/**') == '' }}
         env:
           CARGO_NET_OFFLINE: "true"
         run: |
@@ -262,6 +263,7 @@ jobs:
           cp "$tauri_android_dir/gradle.lockfile" "$RUNNER_TEMP/miora-gradle-lockfiles/external/tauri-android/gradle.lockfile"
 
       - name: Upload bootstrapped Gradle lockfiles
+        if: ${{ hashFiles('web/android-gradle-locks/**') == '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: miora-android-gradle-lockfiles
