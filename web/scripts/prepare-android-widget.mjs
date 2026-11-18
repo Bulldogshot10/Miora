@@ -138,13 +138,21 @@ function enableGradleLocking(
       "    resolutionStrategy.activateDependencyLocking()\n" +
       "}";
     if (!source.includes("resolutionStrategy.activateDependencyLocking()")) {
-      if (!source.includes("buildscript {")) {
-        throw new Error("Could not locate " + label + " buildscript block.");
+      const classpathConfiguration =
+        "configurations.classpath {\n" +
+        "    resolutionStrategy.activateDependencyLocking()\n" +
+        "}";
+      if (source.includes("buildscript {")) {
+        source = source.replace(
+          "buildscript {",
+          "buildscript {\n    " + classpathConfiguration.replaceAll("\n", "\n    "),
+        );
+      } else {
+        // buildSrc uses the plugins DSL and has no explicit buildscript block.
+        source = "buildscript {\n    " +
+          classpathConfiguration.replaceAll("\n", "\n    ") +
+          "\n}\n\n" + source;
       }
-      source = source.replace(
-        "buildscript {",
-        "buildscript {\n    " + classpathLock.replaceAll("\n", "\n    "),
-      );
     }
   }
 
@@ -158,7 +166,7 @@ function enableGradleLocking(
     allProjects ? "        lockAllConfigurations()" : "    lockAllConfigurations()",
     allProjects
       ? "        lockMode = org.gradle.api.artifacts.dsl.LockMode." + lockMode
-      : "    lockMode = org.gradle.api.artifacts.dsl.LockMode." + lockMode,
+      : "    lockMode.set(org.gradle.api.artifacts.dsl.LockMode." + lockMode + ")",
     ...(allProjects ? ["    }"] : []),
     "}",
     endMarker,
@@ -186,7 +194,7 @@ async function enableGeneratedGradleDependencyLocking(strict) {
     allProjects: true,
     strict,
   });
-  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc", { strict });
+  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc", { lockBuildscriptClasspath: true, strict });
 
   await writeFile(rootGradlePath, rootBuild);
   await writeFile(buildSrcGradlePath, buildSrcBuild);
