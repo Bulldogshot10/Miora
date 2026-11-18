@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -341,7 +341,56 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 }
 
 await verifyGradleWrapper();
-await enableGeneratedGradleDependencyLocking();
+
+const bootstrapGradleLocks = process.argv.includes("--bootstrap-gradle-locks");
+const committedGradleLockFiles = [
+  [
+    resolve(webDir, "android-gradle-locks/root/gradle.lockfile"),
+    resolve(webDir, "src-tauri/gen/android/gradle.lockfile"),
+  ],
+  [
+    resolve(webDir, "android-gradle-locks/app/gradle.lockfile"),
+    resolve(webDir, "src-tauri/gen/android/app/gradle.lockfile"),
+  ],
+  [
+    resolve(webDir, "android-gradle-locks/buildSrc/gradle.lockfile"),
+    resolve(webDir, "src-tauri/gen/android/buildSrc/gradle.lockfile"),
+  ],
+  [
+    resolve(webDir, "android-gradle-locks/gradle/verification-metadata.xml"),
+    resolve(webDir, "src-tauri/gen/android/gradle/verification-metadata.xml"),
+  ],
+];
+
+async function hasFile(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const gradleLockFilePresence = await Promise.all(
+  committedGradleLockFiles.map(([source]) => hasFile(source)),
+);
+const hasCommittedGradleLocks = gradleLockFilePresence.every(Boolean);
+if (gradleLockFilePresence.some(Boolean) && !hasCommittedGradleLocks) {
+  throw new Error(
+    "The committed Android Gradle lockfile set is incomplete; refusing an unlocked build.",
+  );
+}
+
+if (bootstrapGradleLocks || hasCommittedGradleLocks) {
+  await enableGeneratedGradleDependencyLocking();
+}
+if (hasCommittedGradleLocks) {
+  await Promise.all(
+    committedGradleLockFiles.map(([source, destination]) =>
+      copyFile(source, destination),
+    ),
+  );
+}
 
 let gradle = await readFile(gradlePath, "utf8");
 
