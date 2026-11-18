@@ -105,7 +105,7 @@ jobs:
         run: CARGO_NET_OFFLINE=true cargo test --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 
   android:
-    if: ${{ github.event_name != 'workflow_call' || !inputs.quality_only }}
+    if: ${{ inputs.quality_only != true }}
     name: Build Android APK
     runs-on: ubuntu-24.04
     steps:
