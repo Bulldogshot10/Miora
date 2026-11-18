@@ -97,6 +97,9 @@ jobs:
       - name: Test Tauri host integration
         run: CARGO_NET_OFFLINE=true cargo test --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 
+      - name: Verify dependency lockfiles remained unchanged
+        run: git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
+
   android:
     name: Build Android APK
     runs-on: ubuntu-24.04
@@ -210,6 +213,9 @@ jobs:
           while IFS= read -r apk; do
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
           done <<< "$apks"
+
+      - name: Verify dependency lockfiles remained unchanged
+        run: git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

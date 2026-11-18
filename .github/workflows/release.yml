@@ -224,6 +224,9 @@ jobs:
             sleep "$((attempt * 20))"
           done
 
+      - name: Verify dependency lockfiles remained unchanged
+        run: git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
+
       - name: Verify release APK signatures
         env:
           RELEASE_TAG: ${{ github.ref_name }}

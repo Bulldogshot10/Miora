@@ -208,11 +208,12 @@ await mkdir(bindingsOutput, { recursive: true });
 // Proc-macro interfaces use UniFFI library mode. The embedded metadata is
 // architecture-independent, so a host build can generate the Kotlin bindings
 // later used by the Android build.
-run("cargo", ["build", "--manifest-path", cargoManifest, "--lib"], cargoWorkingDir);
+run("cargo", ["build", "--locked", "--manifest-path", cargoManifest, "--lib"], cargoWorkingDir);
 run(
   "cargo",
   [
     "run",
+    "--locked",
     "--manifest-path",
     cargoManifest,
     "--features",
