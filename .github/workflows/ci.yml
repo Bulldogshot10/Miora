@@ -61,8 +61,6 @@ jobs:
           test -s web/src-tauri/Cargo.lock
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
-          cargo fetch --locked --target x86_64-linux-android
-          cargo fetch --locked --target x86_64-linux-android --manifest-path web/src-tauri/Cargo.toml
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.23.0 --locked
@@ -183,6 +181,8 @@ jobs:
         run: |
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
+          cargo fetch --locked --target x86_64-linux-android
+          cargo fetch --locked --target x86_64-linux-android --manifest-path web/src-tauri/Cargo.toml
 
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
