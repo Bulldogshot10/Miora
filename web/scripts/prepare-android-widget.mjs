@@ -121,6 +121,33 @@ await Promise.all([
 
 const javaRoot = resolve(generatedAndroidDir, "java");
 const gradlePath = resolve(webDir, "src-tauri/gen/android/app/build.gradle.kts");
+const gradleWrapperPropertiesPath = resolve(
+  webDir,
+  "src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties",
+);
+const GRADLE_DISTRIBUTION = "gradle-9.6.1-bin.zip";
+const GRADLE_DISTRIBUTION_SHA256 =
+  "9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14";
+
+async function verifyGradleWrapper() {
+  let properties = await readFile(gradleWrapperPropertiesPath, "utf8");
+  const distributionLine = properties
+    .split("\n")
+    .find((line) => line.startsWith("distributionUrl="));
+  if (!distributionLine || !distributionLine.includes(GRADLE_DISTRIBUTION)) {
+    throw new Error(
+      "Unexpected Tauri Gradle wrapper distribution; expected " + GRADLE_DISTRIBUTION,
+    );
+  }
+
+  const checksumLine = "distributionSha256Sum=" + GRADLE_DISTRIBUTION_SHA256;
+  if (/^distributionSha256Sum=/m.test(properties)) {
+    properties = properties.replace(/^distributionSha256Sum=.*$/m, checksumLine);
+  } else {
+    properties = properties.trimEnd() + "\n" + checksumLine + "\n";
+  }
+  await writeFile(gradleWrapperPropertiesPath, properties);
+}
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, stdio: "inherit" });
@@ -269,6 +296,8 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
   mainActivity = mainActivity.replace(onCreate, secureOnCreate);
   await writeFile(mainActivityPath, mainActivity);
 }
+
+await verifyGradleWrapper();
 
 let gradle = await readFile(gradlePath, "utf8");
 gradle = gradle.replace(

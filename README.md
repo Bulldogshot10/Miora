@@ -70,7 +70,7 @@ Install the platform prerequisites listed in the Tauri v2 documentation first.
 
 ## Build Android
 
-Install Android Studio, Java 17, Android SDK Platform 36, and Android NDK r30. Configure JAVA_HOME, ANDROID_HOME, and ANDROID_NDK_ROOT.
+Install Android Studio, Java 17, Android SDK Platform 37, and Android NDK r30. Configure JAVA_HOME, ANDROID_HOME, and ANDROID_NDK_ROOT.
 
 ~~~sh
 cd web
@@ -115,7 +115,7 @@ cargo check --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 
 The repository tracks all three dependency lockfiles: `Cargo.lock`, `web/src-tauri/Cargo.lock`, and `web/package-lock.json`. Install JavaScript dependencies with `npm ci`; use Cargo's `--locked` flag for builds and checks. CI verifies the lockfiles with `cargo fetch --locked` before any compilation and fails if a manifest change would rewrite them.
 
-The build toolchain is pinned in CI: Rust 1.100.0, Node.js 22.23.4, Temurin Java 17.0.21+9, Android SDK Platform 36, Android Build Tools 36.0.0, and Android NDK 30.0.16248370. CI and release use the same committed dependency resolution.
+The build toolchain is pinned in CI: Rust 1.100.0, Node.js 22.23.4, Temurin Java 17.0.21+9, Android SDK Platform 37, Android Build Tools 36.0.0, and Android NDK 30.0.16248370, and Gradle 9.6.1 with its official SHA-256 distribution checksum enforced. CI and release use the same committed dependency resolution.
 
 ## CI and releases
 

@@ -45,6 +45,7 @@ jobs:
             web/package-lock.json
             web/src-tauri/tauri.conf.json
             web/src-tauri/Cargo.lock
+            web/scripts/prepare-android-widget.mjs
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
@@ -54,7 +55,7 @@ jobs:
       - name: Install Android platform and NDK
         run: |
           sdkmanager --install \
-            "platforms;android-36" \
+            "platforms;android-37" \
             "build-tools;36.0.0" \
             "ndk;30.0.16248370"
           ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
@@ -276,3 +277,4 @@ jobs:
             Cargo.lock
             web/package-lock.json
             web/src-tauri/Cargo.lock
+            web/scripts/prepare-android-widget.mjs
