@@ -1,7 +1,7 @@
 import java.util.Properties
 
-// Init scripts run for auxiliary builds such as buildSrc as well.
-// Only the generated Android build owns an :app project; skip auxiliary builds.
+// Gradle also loads this init script for auxiliary builds such as buildSrc.
+// Only the generated Android build owns an :app project.
 gradle.projectsEvaluated {
     def appProject = gradle.rootProject.findProject(":app")
     if (appProject == null) {
@@ -12,76 +12,75 @@ gradle.projectsEvaluated {
         return
     }
 
-        // Mirror AGP's own Aapt2MavenUtils coordinate construction. Read both
-        // the plugin version and its bundled AAPT2 build number from AGP itself.
-        def appPlugin = appProject.plugins.find {
-            it.class.name == "com.android.build.gradle.AppPlugin"
-        }
-        if (appPlugin == null) {
-            throw new GradleException(
-                "The :app project has no com.android.build.gradle.AppPlugin. " +
-                "Applied plugins: ${appProject.plugins.collect { it.class.name }.sort()}"
-            )
-        }
-
-        def agpClassLoader = appPlugin.class.classLoader
-        def agpVersion = agpClassLoader
-            .loadClass("com.android.Version")
-            .getField("ANDROID_GRADLE_PLUGIN_VERSION")
-            .get(null)
-            .toString()
-
-        def versionPropertiesPath =
-            "com/android/build/gradle/internal/res/aapt2_version.properties"
-        def versionPropertiesStream =
-            agpClassLoader.getResourceAsStream(versionPropertiesPath)
-        if (versionPropertiesStream == null) {
-            throw new GradleException(
-                "AGP ${agpVersion} does not expose ${versionPropertiesPath}; " +
-                "cannot resolve a version-matched AAPT2 binary."
-            )
-        }
-
-        def versionProperties = new Properties()
-        versionPropertiesStream.withCloseable { stream ->
-            versionProperties.load(stream)
-        }
-        def aapt2BuildNumber = versionProperties.getProperty("aapt2Version")
-        if (aapt2BuildNumber == null || aapt2BuildNumber.trim().isEmpty()) {
-            throw new GradleException(
-                "AGP ${agpVersion} has no aapt2Version in its bundled properties."
-            )
-        }
-
-        def aapt2Version = "${agpVersion}-${aapt2BuildNumber}"
-        def configuration = appProject.configurations.create("mioraAapt2Verification") {
-            it.visible = false
-            it.transitive = false
-            it.canBeConsumed = false
-            it.canBeResolved = true
-            it.description = "Resolve the AGP-matched Linux AAPT2 binary for checksum verification."
-        }
-        appProject.dependencies.add(configuration.name, [
-            group: "com.android.tools.build",
-            name: "aapt2",
-            version: aapt2Version,
-            classifier: "linux"
-        ])
-
-        // Resolving this configuration makes Gradle write verification metadata
-        // for both the POM and the platform-specific Linux binary JAR.
-        def aapt2Jar = configuration.resolve().find {
-            it.isFile() && it.name.startsWith("aapt2-") && it.name.endsWith("-linux.jar")
-        }
-        if (aapt2Jar == null || aapt2Jar.length() == 0L) {
-            throw new GradleException(
-                "Could not resolve the non-empty Linux AAPT2 JAR for AGP ${agpVersion}."
-            )
-        }
-
-        println(
-            "Resolved AGP ${agpVersion} Linux AAPT2 ${aapt2Version}: " +
-            "${aapt2Jar.name} (${aapt2Jar.length()} bytes)"
+    // Mirror AGP's own Aapt2MavenUtils coordinate construction. Read both
+    // the plugin version and its bundled AAPT2 build number from AGP itself.
+    def appPlugin = appProject.plugins.find {
+        it.class.name == "com.android.build.gradle.AppPlugin"
+    }
+    if (appPlugin == null) {
+        throw new GradleException(
+            "The :app project has no com.android.build.gradle.AppPlugin. " +
+            "Applied plugins: ${appProject.plugins.collect { it.class.name }.sort()}"
         )
     }
+
+    def agpClassLoader = appPlugin.class.classLoader
+    def agpVersion = agpClassLoader
+        .loadClass("com.android.Version")
+        .getField("ANDROID_GRADLE_PLUGIN_VERSION")
+        .get(null)
+        .toString()
+
+    def versionPropertiesPath =
+        "com/android/build/gradle/internal/res/aapt2_version.properties"
+    def versionPropertiesStream =
+        agpClassLoader.getResourceAsStream(versionPropertiesPath)
+    if (versionPropertiesStream == null) {
+        throw new GradleException(
+            "AGP ${agpVersion} does not expose ${versionPropertiesPath}; " +
+            "cannot resolve a version-matched AAPT2 binary."
+        )
+    }
+
+    def versionProperties = new Properties()
+    versionPropertiesStream.withCloseable { stream ->
+        versionProperties.load(stream)
+    }
+    def aapt2BuildNumber = versionProperties.getProperty("aapt2Version")
+    if (aapt2BuildNumber == null || aapt2BuildNumber.trim().isEmpty()) {
+        throw new GradleException(
+            "AGP ${agpVersion} has no aapt2Version in its bundled properties."
+        )
+    }
+
+    def aapt2Version = "${agpVersion}-${aapt2BuildNumber}"
+    def configuration = appProject.configurations.create("mioraAapt2Verification") {
+        it.visible = false
+        it.transitive = false
+        it.canBeConsumed = false
+        it.canBeResolved = true
+        it.description = "Resolve the AGP-matched Linux AAPT2 binary for checksum verification."
+    }
+    appProject.dependencies.add(configuration.name, [
+        group: "com.android.tools.build",
+        name: "aapt2",
+        version: aapt2Version,
+        classifier: "linux"
+    ])
+
+    // Resolve before tasks execute so --write-verification-metadata captures
+    // the POM and platform-specific Linux binary JAR checksums.
+    def aapt2Jar = configuration.resolve().find {
+        it.isFile() && it.name.startsWith("aapt2-") && it.name.endsWith("-linux.jar")
+    }
+    if (aapt2Jar == null || aapt2Jar.length() == 0L) {
+        throw new GradleException(
+            "Could not resolve the non-empty Linux AAPT2 JAR for AGP ${agpVersion}."
+        )
+    }
+
+    println(
+        "Resolved AGP ${agpVersion} Linux AAPT2 ${aapt2Version}: " +
+        "${aapt2Jar.name} (${aapt2Jar.length()} bytes)"
+    )
 }
