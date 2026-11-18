@@ -92,48 +92,14 @@ gradle.projectsEvaluated {
         }
     }
 
-    // AGP creates :app:androidApis lazily and the ordinary dependency report
-    // does not resolve it. Strict dependency locking still requires a lock state
-    // for this configuration when release resource processing first consumes it.
-    // Resolve it during the lock bootstrap task so --write-locks records its
-    // state (the Android platform itself is pinned separately to API 36).
-    def androidApisLockTask = appProject.tasks.register("mioraResolveAndroidApisForLocking") {
-        group = "verification"
-        description = "Resolve AGP's Android API configuration so strict dependency locking has a complete state."
-
-        doLast {
-            // AGP 9.3.1 registers androidApis lazily; it is not present during
-            // projectsEvaluated, but is available once the task graph is realized.
-            def androidApisConfiguration = appProject.configurations.findByName("androidApis")
-            if (androidApisConfiguration == null || !androidApisConfiguration.canBeResolved) {
-                def candidates = appProject.configurations
-                    .collect { "${it.name}(resolvable=${it.canBeResolved})" }
-                    .findAll { it.toLowerCase().contains("android") }
-                    .sort()
-                throw new GradleException(
-                    "AGP ${agpVersion} did not expose a resolvable :app:androidApis configuration " +
-                    "during task execution. Android configurations: ${candidates}"
-                )
-            }
-
-            def androidApiFiles = androidApisConfiguration.resolve()
-            if (androidApiFiles.isEmpty()) {
-                throw new GradleException(
-                    "AGP :app:androidApis resolved no Android API files; verify Android SDK Platform 36."
-                )
-            }
-            println(
-                "Resolved :app:androidApis for strict dependency locking: " +
-                "${androidApiFiles.size()} file(s)"
-            )
-        }
-    }
-
-    // Keep dependency resolution in the same project as its task actions.
-    // Both tasks are required when generating the lock and verification files.
+    // AGP 9.3.1 consumes an internal :app:androidApis lock identity while
+    // serializing ParseLibraryResourcesTask. It is not exposed as a resolvable
+    // Project configuration. CI records its empty lock state explicitly after
+    // Gradle generates the app lockfile; keep resource packaging dependent only
+    // on the AGP-matched AAPT2 verification task.
     appProject.tasks.matching {
         it.name == "packageUniversalReleaseResources"
     }.configureEach {
-        dependsOn(aapt2VerificationTask, androidApisLockTask)
+        dependsOn(aapt2VerificationTask)
     }
 }

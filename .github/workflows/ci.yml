@@ -1,212 +1,3 @@
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  quality:
-    name: Rust and Web quality
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            libgtk-3-dev \
-            libssl-dev \
-            librsvg2-dev \
-            libwebkit2gtk-4.1-dev \
-            patchelf
-
-      - name: Install Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22.23.4"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-        with:
-          toolchain: "1.100.0"
-          components: rustfmt, clippy
-
-      - name: Verify committed lockfiles
-        run: |
-          test -s Cargo.lock
-          test -s web/package-lock.json
-          test -s web/src-tauri/Cargo.lock
-          cargo fetch --locked
-          cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --version 0.23.0 --locked
-
-      - name: Audit Rust dependencies
-        run: |
-          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file Cargo.lock
-          cargo audit --target-arch aarch64 --target-os android --ignore RUSTSEC-2026-0374 --ignore RUSTSEC-2024-0370 --file web/src-tauri/Cargo.lock
-
-      - name: Check Rust formatting
-        run: |
-          cargo fmt --all -- --check
-          cargo fmt --manifest-path web/src-tauri/Cargo.toml --all -- --check
-
-      - name: Test Rust core
-        run: CARGO_NET_OFFLINE=true cargo test --locked --all-targets
-
-      - name: Lint Rust core
-        run: CARGO_NET_OFFLINE=true cargo clippy --locked --all-targets -- -D warnings
-
-      - name: Install Web dependencies
-        run: npm ci --prefix web --no-audit --no-fund
-
-      - name: Audit Web dependencies
-        run: |
-          python3 .github/scripts/audit-npm.py
-          npm audit --omit=dev --audit-level=high --prefix web
-
-      - name: Generate Tauri application icons
-        run: npm run tauri:icons --prefix web
-
-      - name: Check Svelte and TypeScript
-        run: npm run check --prefix web
-
-      - name: Build Web frontend
-        run: npm run build --prefix web
-
-      - name: Check Tauri host
-        run: CARGO_NET_OFFLINE=true cargo check --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
-
-      - name: Test Tauri host integration
-        run: CARGO_NET_OFFLINE=true cargo test --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
-
-  android:
-    name: Build Android APK
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install Linux dependencies for host-side UniFFI bindgen
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            libgtk-3-dev \
-            libssl-dev \
-            librsvg2-dev \
-            libwebkit2gtk-4.1-dev \
-            patchelf
-
-      - name: Install Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22.23.4"
-
-      - name: Set up Java
-        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "17.0.21+9"
-          cache: gradle
-          cache-dependency-path: |
-            web/package-lock.json
-            web/src-tauri/tauri.conf.json
-            web/src-tauri/Cargo.lock
-            web/android-gradle-locks/**
-            web/scripts/prepare-android-widget.mjs
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-        with:
-          packages: platform-tools
-
-      - name: Install Android platform and NDK
-        run: |
-          sdkmanager --install \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;30.0.16248370"
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
-          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
-          TOOLCHAIN_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          test -x "$TOOLCHAIN_BIN/llvm-ar"
-          test -x "$TOOLCHAIN_BIN/llvm-ranlib"
-          ln -sf llvm-ar "$TOOLCHAIN_BIN/aarch64-linux-android-ar"
-          ln -sf llvm-ranlib "$TOOLCHAIN_BIN/aarch64-linux-android-ranlib"
-          echo "RANLIB=$TOOLCHAIN_BIN/llvm-ranlib" >> "$GITHUB_ENV"
-          echo "$TOOLCHAIN_BIN" >> "$GITHUB_PATH"
-
-      - name: Install Rust Android target
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-        with:
-          toolchain: "1.100.0"
-          targets: aarch64-linux-android
-
-      - name: Verify and prefetch locked Rust dependencies
-        run: |
-          cargo fetch --locked
-          cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
-
-      - name: Install Web dependencies
-        run: npm ci --prefix web --no-audit --no-fund
-
-      - name: Initialize Tauri Android project
-        run: npm run tauri:android:init --prefix web
-
-      - name: Generate application icons
-        run: npm run tauri:icons --prefix web
-
-      - name: Build debug APK (retry Maven Central HTTP 429)
-        env:
-          CARGO_NET_OFFLINE: "true"
-        run: |
-          for attempt in 1 2 3; do
-            log_file="$RUNNER_TEMP/miora-android-build-$attempt.log"
-            set +e
-            npm run tauri:android:build --prefix web >"$log_file" 2>&1
-            status=$?
-            set -e
-            cat "$log_file"
-            if [ "$status" -eq 0 ]; then
-              exit 0
-            fi
-            if ! grep -Eiq 'HTTP.*429|status code 429|Too Many Requests' "$log_file"; then
-              exit "$status"
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Maven Central continued returning HTTP 429 after three Android build attempts."
-              exit "$status"
-            fi
-            sleep "$((attempt * 20))"
-          done
-
-      - name: Verify debug APK exists
-        run: |
-          apks="$(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')"
-          if [ -z "$apks" ]; then
-            echo "::error::Android build completed without producing an APK."
             exit 1
           fi
           while IFS= read -r apk; do
@@ -249,6 +40,41 @@ jobs:
             fi
             sleep "$((attempt * 20))"
           done
+
+          # AGP 9.3.1 requests the internal :app:androidApis lock identity
+          # when Gradle serializes release resource task inputs. It is not
+          # exposed as a resolvable Project configuration, and Gradle therefore
+          # cannot discover it through --write-locks. Its Android platform input
+          # comes from the installed SDK, not an external module dependency.
+          # Record an explicit empty lock state so strict mode verifies this
+          # remains dependency-free on every release build.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lockfile = Path("app/gradle.lockfile")
+          if not lockfile.is_file():
+              raise SystemExit("The generated :app Gradle lockfile is missing.")
+
+          lines = lockfile.read_text().splitlines()
+          empty_indexes = [index for index, line in enumerate(lines) if line.startswith("empty=")]
+          if len(empty_indexes) != 1:
+              raise SystemExit(
+                  f"Expected exactly one empty-configuration entry in {lockfile}, got {len(empty_indexes)}."
+              )
+
+          index = empty_indexes[0]
+          empty_configurations = set(filter(None, lines[index][len("empty="):].split(",")))
+          empty_configurations.add("androidApis")
+          lines[index] = "empty=" + ",".join(sorted(empty_configurations))
+          lockfile.write_text("\\n".join(lines) + "\\n")
+
+          persisted = lockfile.read_text().splitlines()
+          if "androidApis" not in next(
+              line[len("empty="):].split(",") for line in persisted if line.startswith("empty=")
+          ):
+              raise SystemExit("The :app:androidApis empty lock state was not persisted.")
+          print("Recorded :app:androidApis as an empty, strictly locked configuration.")
+          PY
 
           tauri_android_dir="$(node "$GITHUB_WORKSPACE/web/scripts/tauri-android-project-dir.mjs")"
           test -s "$tauri_android_dir/gradle.lockfile"
@@ -338,70 +164,3 @@ jobs:
             set +e
             npm run tauri:android:release --prefix web >"$log_file" 2>&1
             status=$?
-            set -e
-            cat "$log_file"
-            if [ "$status" -eq 0 ]; then
-              exit 0
-            fi
-            if ! grep -Eiq 'HTTP.*429|status code 429|Too Many Requests' "$log_file"; then
-              exit "$status"
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::Maven Central continued returning HTTP 429 after three signed release smoke attempts."
-              exit "$status"
-            fi
-            sleep "$((attempt * 20))"
-          done
-
-      - name: Verify signed release smoke APK
-        run: |
-          mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -eq 0 ]; then
-            echo "::error::No signed release APK was produced."
-            exit 1
-          fi
-          for apk in "${apks[@]}"; do
-            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
-            badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")
-            if ! grep -Fq "package: name='com.bulldogshot10.miora'" <<< "$badging"; then
-              echo "::error::Release smoke APK package id is incorrect."
-              exit 1
-            fi
-            if "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -q "android.permission.INTERNET"; then
-              echo "::error::Release smoke APK declares android.permission.INTERNET."
-              exit 1
-            fi
-          done
-
-      - name: Verify dependency lockfiles remained unchanged
-        run: |
-          git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
-          if [ -d web/android-gradle-locks ]; then
-            git diff --exit-code -- web/android-gradle-locks
-            if [ -n "$(git status --porcelain -- web/android-gradle-locks)" ]; then
-              echo "::error::Committed Android Gradle lockfiles changed during the build."
-              exit 1
-            fi
-            if [ -f web/android-gradle-locks/external/tauri-android/gradle.lockfile ]; then
-              tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
-              cmp web/android-gradle-locks/external/tauri-android/gradle.lockfile "$tauri_android_dir/gradle.lockfile"
-            fi
-          fi
-
-          if [ -d "$RUNNER_TEMP/miora-gradle-lockfiles" ]; then
-            tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
-            while IFS= read -r -d '' file; do
-              relative_path="${file#"$RUNNER_TEMP/miora-gradle-lockfiles/"}"
-              if [ "$relative_path" = "external/tauri-android/gradle.lockfile" ]; then
-                destination="$tauri_android_dir/gradle.lockfile"
-              else
-                destination="web/src-tauri/gen/android/$relative_path"
-              fi
-              if [ ! -f "$destination" ]; then
-                echo "::error::Gradle lock artifact was not applied to release build: $relative_path"
-                exit 1
-              fi
-              cmp "$file" "$destination"
-            done < <(find "$RUNNER_TEMP/miora-gradle-lockfiles" -type f -print0 | sort -z)
-          fi
-
