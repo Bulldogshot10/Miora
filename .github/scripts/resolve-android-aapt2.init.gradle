@@ -14,12 +14,10 @@ gradle.projectsEvaluated {
 
     // Mirror AGP's own Aapt2MavenUtils coordinate construction. Read both
     // the plugin version and its bundled AAPT2 build number from AGP itself.
-    def appPlugin = appProject.plugins.find {
-        it.class.name == "com.android.build.gradle.AppPlugin"
-    }
+    def appPlugin = appProject.plugins.findPlugin("com.android.application")
     if (appPlugin == null) {
         throw new GradleException(
-            "The :app project has no com.android.build.gradle.AppPlugin. " +
+            "The :app project has not applied the com.android.application plugin. " +
             "Applied plugins: ${appProject.plugins.collect { it.class.name }.sort()}"
         )
     }
