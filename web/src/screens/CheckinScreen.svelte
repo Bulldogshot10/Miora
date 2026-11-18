@@ -163,7 +163,7 @@
         symptoms: entries,
       });
       hasExistingCheckin = true;
-      hasUnsavedChanges = false;
+      setDirty(false);
       submitState = "success";
       dateMessage = "Saved for " + formatDate(selectedDate, { year: "numeric" }) + ".";
     } catch (error) {
@@ -257,7 +257,7 @@
       max="5"
       step="1"
       bind:value={energyScore}
-      oninput={() => { hasUnsavedChanges = true; clearFeedback(); }}
+      oninput={() => { setDirty(true); clearFeedback(); }}
       disabled={loadingDate || busy || loadError}
       aria-label="Energy level from 1 to 5"
     />

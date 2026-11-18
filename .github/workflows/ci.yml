@@ -39,11 +39,12 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: "1.100.0"
           components: rustfmt, clippy
 
       - name: Verify committed lockfiles
@@ -126,7 +127,7 @@ jobs:
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "17.0.21+9"
           cache: gradle
           cache-dependency-path: |
             web/package-lock.json
@@ -158,6 +159,7 @@ jobs:
       - name: Install Rust Android target
         uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
+          toolchain: "1.100.0"
           targets: aarch64-linux-android
 
       - name: Verify and prefetch locked Rust dependencies
@@ -200,14 +202,14 @@ jobs:
 
       - name: Verify debug APK exists
         run: |
-          mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
-          if [ "${#apks[@]}" -eq 0 ]; then
+          apks="$(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')"
+          if [ -z "$apks" ]; then
             echo "::error::Android build completed without producing an APK."
             exit 1
           fi
-          for apk in "\${apks[@]}"; do
+          while IFS= read -r apk; do
             "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
-          done
+          done <<< "$apks"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
