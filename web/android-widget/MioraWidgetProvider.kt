@@ -9,7 +9,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.widget.RemoteViews
+import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import com.bulldogshot10.miora.uniffi.DailyCheckinInput
 import com.bulldogshot10.miora.uniffi.SymptomInput
 import com.bulldogshot10.miora.uniffi.widgetGetDailyCheckin
@@ -43,6 +45,17 @@ open class MioraWidgetProvider : AppWidgetProvider() {
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        val appContext = context.applicationContext
+        appWidgetIds.forEach { widgetId ->
+            clearDraft(appContext, widgetId)
+            preferences(appContext, widgetId).edit()
+                .remove(key("status", widgetId))
+                .apply()
         }
     }
 
@@ -254,38 +267,66 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    private fun readDraft(context: Context, widgetId: Int): WidgetDraft? {
+        val prefs = preferences(context, widgetId)
+        clearLegacyPlaintextDraftFields(context, widgetId)
+        if (!prefs.getBoolean(key("draft", widgetId), false)) {
+            prefs.edit().remove(key("draft_blob", widgetId)).apply()
+            return null
+        }
+
+        return try {
+            val encrypted = prefs.getString(key("draft_blob", widgetId), null)
+                ?: throw IOException("The encrypted widget draft is missing.")
+            val json = JSONObject(MioraDatabaseKeyStore.decryptWidgetDraft(widgetId, encrypted))
+            require(json.getInt("version") == 1) { "Unknown widget draft version." }
+
+            val date = json.getString("date")
+            val baseState = json.getString("baseState")
+            val mood = json.getInt("mood")
+            val energy = json.getInt("energy")
+            val symptoms = requireNotNull(decodeSymptoms(json.getString("symptoms")))
+
+            require(date.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) {
+                "Invalid widget draft date."
+            }
+            require(baseState.isNotEmpty()) { "Invalid widget draft base state." }
+            require(mood in 1..5 && energy in 1..5) { "Invalid widget draft scores." }
+
+            WidgetDraft(date, baseState, mood, energy, symptoms)
+        } catch (_: Exception) {
+            clearDraft(context, widgetId)
+            null
+        }
+    }
+
     private fun visibleState(
         context: Context,
         widgetId: Int,
         saved: WidgetState?,
         databaseReady: Boolean,
     ): WidgetState {
-        val prefs = preferences(context, widgetId)
-        if (!prefs.getBoolean(key("draft", widgetId), false)) {
+        if (!preferences(context, widgetId).getBoolean(key("draft", widgetId), false)) {
             return saved ?: WidgetState(3, 3, emptyMap())
         }
 
+        val draft = readDraft(context, widgetId)
+            ?: return saved ?: WidgetState(3, 3, emptyMap())
+
         // Drafts belong to a local calendar date; never carry yesterday's entry forward.
-        if (prefs.getString(key("draft_date", widgetId), null) != todayIso()) {
+        if (draft.date != todayIso()) {
             clearDraft(context, widgetId)
             return saved ?: WidgetState(3, 3, emptyMap())
         }
 
         // Compare with the app's current record only when SQLite was readable.
         // A transient open/lock error must never erase an unsaved widget draft.
-        val baseState = prefs.getString(key("draft_base", widgetId), "none")
-        if (databaseReady && baseState != encodeState(saved)) {
+        if (databaseReady && draft.baseState != encodeState(saved)) {
             clearDraft(context, widgetId)
             return saved ?: WidgetState(3, 3, emptyMap())
         }
 
-        return WidgetState(
-            mood = prefs.getInt(key("mood", widgetId), saved?.mood ?: 3).coerceIn(1, 5),
-            energy = prefs.getInt(key("energy", widgetId), saved?.energy ?: 3).coerceIn(1, 5),
-            symptoms = decodeSymptoms(prefs.getString(key("symptoms", widgetId), null))
-                ?: saved?.symptoms
-                ?: emptyMap(),
-        )
+        return WidgetState(draft.mood, draft.energy, draft.symptoms)
     }
 
     private fun saveDraft(
@@ -294,18 +335,31 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         state: WidgetState,
         savedState: WidgetState?,
     ) {
-        val prefs = preferences(context, widgetId)
-        val editor = prefs.edit()
-        if (!prefs.getBoolean(key("draft", widgetId), false)) {
-            editor.putString(key("draft_base", widgetId), encodeState(savedState))
-        }
-        editor
+        val previousDraft = readDraft(context, widgetId)
+        val baseState = previousDraft?.baseState ?: encodeState(savedState)
+        val json = JSONObject()
+            .put("version", 1)
+            .put("date", todayIso())
+            .put("baseState", baseState)
+            .put("mood", state.mood)
+            .put("energy", state.energy)
+            .put("symptoms", encodeSymptoms(state.symptoms))
+        val encrypted = MioraDatabaseKeyStore.encryptWidgetDraft(widgetId, json.toString())
+
+        preferences(context, widgetId).edit()
             .putBoolean(key("draft", widgetId), true)
-            .putString(key("draft_date", widgetId), todayIso())
-            .putInt(key("mood", widgetId), state.mood)
-            .putInt(key("energy", widgetId), state.energy)
-            .putString(key("symptoms", widgetId), encodeSymptoms(state.symptoms))
+            .putString(key("draft_blob", widgetId), encrypted)
             .remove(key("status", widgetId))
+            .apply()
+    }
+
+    private fun clearLegacyPlaintextDraftFields(context: Context, widgetId: Int) {
+        preferences(context, widgetId).edit()
+            .remove(key("mood", widgetId))
+            .remove(key("energy", widgetId))
+            .remove(key("symptoms", widgetId))
+            .remove(key("draft_date", widgetId))
+            .remove(key("draft_base", widgetId))
             .apply()
     }
 
@@ -315,6 +369,7 @@ open class MioraWidgetProvider : AppWidgetProvider() {
     private fun clearDraft(context: Context, widgetId: Int) {
         preferences(context, widgetId).edit()
             .remove(key("draft", widgetId))
+            .remove(key("draft_blob", widgetId))
             .remove(key("mood", widgetId))
             .remove(key("energy", widgetId))
             .remove(key("symptoms", widgetId))
@@ -441,6 +496,14 @@ open class MioraWidgetProvider : AppWidgetProvider() {
     }
 
     private data class WidgetState(
+        val mood: Int,
+        val energy: Int,
+        val symptoms: Map<String, Int>,
+    )
+
+    private data class WidgetDraft(
+        val date: String,
+        val baseState: String,
         val mood: Int,
         val energy: Int,
         val symptoms: Map<String, Int>,

@@ -3,6 +3,7 @@ package __PACKAGE__
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.Base64
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -27,11 +28,65 @@ internal fun mioraDatabaseFile(context: Context): File =
 internal object MioraDatabaseKeyStore {
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
     private const val WRAPPING_KEY_ALIAS = "com.bulldogshot10.miora.database-wrap-v1"
+    private const val WIDGET_DRAFT_KEY_ALIAS = "com.bulldogshot10.miora.widget-draft-v1"
     private const val WRAPPED_KEY_FILE = "miora-database-key-v1.bin"
     private const val FORMAT_VERSION: Byte = 1
+    private const val WIDGET_DRAFT_FORMAT_VERSION: Byte = 1
     private const val AES_GCM_IV_BYTES = 12
     private const val DATABASE_KEY_BYTES = 32
     private const val GCM_TAG_BITS = 128
+
+    @Synchronized
+    @Throws(Exception::class)
+    fun encryptWidgetDraft(widgetId: Int, plaintext: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateAesKey(WIDGET_DRAFT_KEY_ALIAS))
+        val iv = cipher.iv
+        check(iv.size == AES_GCM_IV_BYTES) { "Unexpected Android Keystore GCM IV length." }
+        cipher.updateAAD(widgetDraftAad(widgetId))
+
+        val plaintextBytes = plaintext.toByteArray(Charsets.UTF_8)
+        val ciphertext = try {
+            cipher.doFinal(plaintextBytes)
+        } finally {
+            plaintextBytes.fill(0)
+        }
+
+        val encrypted = ByteArray(1 + iv.size + ciphertext.size)
+        encrypted[0] = WIDGET_DRAFT_FORMAT_VERSION
+        System.arraycopy(iv, 0, encrypted, 1, iv.size)
+        System.arraycopy(ciphertext, 0, encrypted, 1 + iv.size, ciphertext.size)
+        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
+    }
+
+    @Synchronized
+    @Throws(Exception::class)
+    fun decryptWidgetDraft(widgetId: Int, encryptedValue: String): String {
+        val encrypted = Base64.decode(encryptedValue, Base64.NO_WRAP)
+        val minimumLength = 1 + AES_GCM_IV_BYTES + (GCM_TAG_BITS / 8)
+        if (encrypted.size < minimumLength || encrypted[0] != WIDGET_DRAFT_FORMAT_VERSION) {
+            throw IOException("The encrypted widget draft is malformed.")
+        }
+
+        val iv = encrypted.copyOfRange(1, 1 + AES_GCM_IV_BYTES)
+        val ciphertext = encrypted.copyOfRange(1 + AES_GCM_IV_BYTES, encrypted.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            getOrCreateAesKey(WIDGET_DRAFT_KEY_ALIAS),
+            GCMParameterSpec(GCM_TAG_BITS, iv),
+        )
+        cipher.updateAAD(widgetDraftAad(widgetId))
+        val plaintext = cipher.doFinal(ciphertext)
+        return try {
+            String(plaintext, Charsets.UTF_8)
+        } finally {
+            plaintext.fill(0)
+        }
+    }
+
+    private fun widgetDraftAad(widgetId: Int): ByteArray =
+        "com.bulldogshot10.miora.widget-draft.v1:$widgetId".toByteArray(Charsets.UTF_8)
 
     @Synchronized
     @Throws(Exception::class)
@@ -117,9 +172,12 @@ internal object MioraDatabaseKeyStore {
         }
     }
 
-    private fun getOrCreateWrappingKey(): SecretKey {
+    private fun getOrCreateWrappingKey(): SecretKey =
+        getOrCreateAesKey(WRAPPING_KEY_ALIAS)
+
+    private fun getOrCreateAesKey(alias: String): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
-        val existing = keyStore.getKey(WRAPPING_KEY_ALIAS, null) as? SecretKey
+        val existing = keyStore.getKey(alias, null) as? SecretKey
         if (existing != null) return existing
 
         val generator = KeyGenerator.getInstance(
@@ -128,7 +186,7 @@ internal object MioraDatabaseKeyStore {
         )
         generator.init(
             KeyGenParameterSpec.Builder(
-                WRAPPING_KEY_ALIAS,
+                alias,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
             )
                 .setKeySize(256)
