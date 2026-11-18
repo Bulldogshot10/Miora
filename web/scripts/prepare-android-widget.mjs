@@ -301,9 +301,12 @@ await verifyGradleWrapper();
 
 let gradle = await readFile(gradlePath, "utf8");
 gradle = gradle.replace(
-  /manifestPlaceholders\["usesCleartextTraffic"\] = true/g,
-  'manifestPlaceholders["usesCleartextTraffic"] = false',
+  /manifestPlaceholders\["usesCleartextTraffic"\]\s*=\s*"?true"?/g,
+  'manifestPlaceholders["usesCleartextTraffic"] = "false"',
 );
+if (/manifestPlaceholders\["usesCleartextTraffic"\]\s*=\s*"?true"?/.test(gradle)) {
+  throw new Error("Android debug build still enables unrestricted cleartext traffic.");
+}
 if (!gradle.includes("net.java.dev.jna:jna:")) {
   const dependencyBlock = gradle.match(/dependencies\s*\{/);
   if (!dependencyBlock) {

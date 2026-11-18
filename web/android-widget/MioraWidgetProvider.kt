@@ -398,15 +398,17 @@ open class MioraWidgetProvider : AppWidgetProvider() {
     private fun decodeSymptoms(value: String?): Map<String, Int>? {
         if (value == null) return null
         if (value.isEmpty()) return emptyMap()
-        return value.split(",").mapNotNull { item ->
+        val decoded = linkedMapOf<String, Int>()
+        for (item in value.split(",")) {
             val parts = item.split(":")
-            if (parts.size != 2 || parts[0] !in SYMPTOM_CODES) {
-                null
-            } else {
-                val severity = parts[1].toIntOrNull()?.coerceIn(1, 3) ?: return@mapNotNull null
-                parts[0] to severity
+            if (parts.size != 2 || parts[0] !in SYMPTOM_CODES || parts[0] in decoded) {
+                return null
             }
-        }.toMap()
+            val severity = parts[1].toIntOrNull() ?: return null
+            if (severity !in 1..3) return null
+            decoded[parts[0]] = severity
+        }
+        return decoded
     }
 
     private fun setSymptom(
