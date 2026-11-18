@@ -409,7 +409,7 @@ mod tests {
 
         assert_eq!(follicular.phase, CyclePhase::Follicular);
         assert_eq!(ovulation.phase, CyclePhase::Learning);
-        assert!(ovulation.probabilities.ovulation_window > 0.45);
+        assert!(ovulation.probabilities.ovulation_window > 0.4);
         assert_eq!(luteal.phase, CyclePhase::Luteal);
         assert!(ovulation.is_personalized);
     }

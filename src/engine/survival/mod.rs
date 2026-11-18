@@ -1,8 +1,8 @@
 pub mod gamma;
 pub mod weibull;
 
-use gamma::Gamma;
-use weibull::Weibull;
+use self::gamma::Gamma;
+use self::weibull::Weibull;
 
 use crate::engine::hierarchical::HierarchicalPosterior;
 
