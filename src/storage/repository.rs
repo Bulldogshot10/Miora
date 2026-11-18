@@ -24,8 +24,13 @@ fn ensure_period_start_allowed(
         SELECT EXISTS(
             SELECT 1 FROM periods
             WHERE start_date < ?1
-              AND end_date IS NOT NULL
-              AND end_date >= ?1
+              AND (
+                  (end_date IS NOT NULL AND end_date >= ?1)
+                  OR (
+                      last_bleeding_observation IS NOT NULL
+                      AND last_bleeding_observation >= ?1
+                  )
+              )
         )
         ",
         params![start_text],

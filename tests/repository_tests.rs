@@ -146,6 +146,23 @@ fn period_end_must_precede_the_next_period_start() {
 }
 
 #[test]
+fn new_period_start_cannot_precede_an_active_bleeding_observation() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    let active_start = date(2026, 11, 1);
+    repository.add_period_start(active_start).unwrap();
+    repository
+        .report_bleeding_status(active_start, date(2026, 11, 8), true, None)
+        .unwrap();
+
+    assert!(repository.add_period_start(date(2026, 11, 7)).is_err());
+    assert!(repository.add_period_start(date(2026, 11, 9)).is_ok());
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn period_start_and_confirmed_end_are_atomic() {
     let path = temporary_database_path();
     let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
