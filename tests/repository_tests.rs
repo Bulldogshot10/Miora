@@ -356,7 +356,6 @@ fn concurrent_legacy_database_opens_serialize_sqlcipher_migration() {
     }
 }
 
-
 #[test]
 fn migration_refuses_to_replace_plaintext_database_when_wal_checkpoint_is_busy() {
     let path = temporary_database_path();
