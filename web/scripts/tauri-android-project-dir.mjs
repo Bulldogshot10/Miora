@@ -10,6 +10,7 @@ export function getTauriAndroidProjectDir(webDir) {
     {
       cwd: webDir,
       encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "inherit"],
     },
   );
