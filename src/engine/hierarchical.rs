@@ -91,14 +91,10 @@ pub fn hierarchical_binary_probability(
         return None;
     }
 
-    let other_rate = (other_successes as f64 + 1.0)
-        / (other_trials as f64 + 2.0);
+    let other_rate = (other_successes as f64 + 1.0) / (other_trials as f64 + 2.0);
     let strength = prior_strength.max(0.0);
     let alpha = 1.0 + other_rate * strength;
     let beta = 1.0 + (1.0 - other_rate) * strength;
 
-    Some(
-        (matching_successes as f64 + alpha)
-            / (matching_trials as f64 + alpha + beta),
-    )
+    Some((matching_successes as f64 + alpha) / (matching_trials as f64 + alpha + beta))
 }

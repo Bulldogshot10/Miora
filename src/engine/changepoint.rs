@@ -42,8 +42,7 @@ pub fn detect_cycle_regimes(values: &[f64]) -> ChangepointResult {
     }];
 
     for value in values.iter().copied().skip(1) {
-        let prior_standard_deviation =
-            (PRIOR_VARIANCE + OBSERVATION_VARIANCE).sqrt();
+        let prior_standard_deviation = (PRIOR_VARIANCE + OBSERVATION_VARIANCE).sqrt();
         let prior_log_probability =
             normal_log_pdf(value, PRIOR_MEAN_DAYS, prior_standard_deviation);
 
@@ -51,27 +50,20 @@ pub fn detect_cycle_regimes(values: &[f64]) -> ChangepointResult {
         let mut next_states = Vec::with_capacity(states.len() + 1);
 
         for state in &states {
-            let posterior_precision =
-                1.0 / PRIOR_VARIANCE + state.count / OBSERVATION_VARIANCE;
+            let posterior_precision = 1.0 / PRIOR_VARIANCE + state.count / OBSERVATION_VARIANCE;
             let posterior_variance = 1.0 / posterior_precision;
             let posterior_mean = (PRIOR_MEAN_DAYS / PRIOR_VARIANCE
                 + state.sum / OBSERVATION_VARIANCE)
                 / posterior_precision;
             let predictive_variance = OBSERVATION_VARIANCE + posterior_variance;
-            let predictive_log_probability = normal_log_pdf(
-                value,
-                posterior_mean,
-                predictive_variance.sqrt(),
-            );
+            let predictive_log_probability =
+                normal_log_pdf(value, posterior_mean, predictive_variance.sqrt());
             let predictive_probability = predictive_log_probability.exp();
 
-            changepoint_mass +=
-                state.probability * prior_log_probability.exp() * HAZARD;
+            changepoint_mass += state.probability * prior_log_probability.exp() * HAZARD;
             next_states.push(RunState {
                 run_length: state.run_length + 1,
-                probability: state.probability
-                    * predictive_probability
-                    * (1.0 - HAZARD),
+                probability: state.probability * predictive_probability * (1.0 - HAZARD),
                 count: state.count + 1.0,
                 sum: state.sum + value,
             });

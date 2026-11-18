@@ -1,8 +1,8 @@
 use miora::engine::changepoint::detect_cycle_regimes;
 use miora::engine::hierarchical::{PopulationPrior, infer_cycle_length};
 use miora::engine::observation::{CycleObservation, CycleObservationKind};
-use miora::engine::survival::predict_next_cycle;
 use miora::engine::survival::gamma::Gamma;
+use miora::engine::survival::predict_next_cycle;
 use miora::engine::survival::weibull::Weibull;
 
 #[test]

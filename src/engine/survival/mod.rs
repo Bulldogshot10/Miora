@@ -61,14 +61,14 @@ pub fn predict_next_cycle(
         let denominator = (weibull_mass + gamma_mass).max(f64::MIN_POSITIVE);
         (weibull_mass / denominator, gamma_mass / denominator)
     };
-    let hierarchical_weight =
-        (effective_events / (effective_events + hierarchical.prior_strength.max(0.0)))
-            .clamp(0.0, 1.0);
+    let hierarchical_weight = (effective_events
+        / (effective_events + hierarchical.prior_strength.max(0.0)))
+    .clamp(0.0, 1.0);
     let censor_day = censor.unwrap_or(0.0);
 
     let mixture_cdf = |day: f64| {
-        let personal_cdf = weibull_weight * weibull_fit.0.cdf(day)
-            + gamma_weight * gamma_fit.0.cdf(day);
+        let personal_cdf =
+            weibull_weight * weibull_fit.0.cdf(day) + gamma_weight * gamma_fit.0.cdf(day);
         let prior_cdf = hierarchical.predictive_cdf(day);
         hierarchical_weight * personal_cdf + (1.0 - hierarchical_weight) * prior_cdf
     };
@@ -91,11 +91,7 @@ pub fn predict_next_cycle(
     })
 }
 
-fn quantile_day(
-    cdf: &impl Fn(f64) -> f64,
-    censor_day: f64,
-    probability: f64,
-) -> Option<u32> {
+fn quantile_day(cdf: &impl Fn(f64) -> f64, censor_day: f64, probability: f64) -> Option<u32> {
     let first_day = censor_day.floor().max(0.0) as u32 + 1;
     (first_day..=240).find(|day| cdf(f64::from(*day)) >= probability)
 }
@@ -120,8 +116,7 @@ fn fit_weibull(events: &[(f64, f64)], censor: Option<f64>) -> Option<(Weibull, f
                 likelihood += model.log_survival(age);
             }
 
-            if likelihood.is_finite()
-                && best.as_ref().is_none_or(|(_, score)| likelihood > *score)
+            if likelihood.is_finite() && best.as_ref().is_none_or(|(_, score)| likelihood > *score)
             {
                 best = Some((model, likelihood));
             }

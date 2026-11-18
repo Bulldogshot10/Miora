@@ -17,8 +17,7 @@ impl Weibull {
         if value <= 0.0 || self.shape <= 0.0 || self.scale <= 0.0 {
             return f64::NEG_INFINITY;
         }
-        self.shape.ln() - self.scale.ln()
-            + (self.shape - 1.0) * (value.ln() - self.scale.ln())
+        self.shape.ln() - self.scale.ln() + (self.shape - 1.0) * (value.ln() - self.scale.ln())
             - (value / self.scale).powf(self.shape)
     }
 

@@ -15,10 +15,7 @@ pub fn estimate_next_period(starts: &[NaiveDate]) -> Option<CyclePrediction> {
 }
 
 /// Predict using the active cycle as a right-censored observation on the supplied date.
-pub fn estimate_next_period_at(
-    starts: &[NaiveDate],
-    today: NaiveDate,
-) -> Option<CyclePrediction> {
+pub fn estimate_next_period_at(starts: &[NaiveDate], today: NaiveDate) -> Option<CyclePrediction> {
     let latest = starts.iter().copied().filter(|date| *date <= today).max()?;
     let elapsed = (today - latest).get_days().max(0) as f64;
     estimate_with_censoring(
@@ -55,8 +52,8 @@ fn estimate_with_censoring(
         return None;
     }
 
-    let current_observation = censored_age
-        .map(|age| CycleObservation::right_censored(age.round().max(0.0) as u32));
+    let current_observation =
+        censored_age.map(|age| CycleObservation::right_censored(age.round().max(0.0) as u32));
     let censor_for_model = current_observation
         .filter(|observation| observation.elapsed_days > 0)
         .map(|observation| f64::from(observation.elapsed_days));
