@@ -385,7 +385,7 @@ async function listGradleLockFiles(directory, prefix = "") {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const relativePath = prefix ? prefix + "/" + entry.name : entry.name;
-    const fullPath = resolve(directory, relativePath);
+    const fullPath = resolve(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...await listGradleLockFiles(fullPath, relativePath));
     } else if (
