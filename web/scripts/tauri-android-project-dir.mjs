@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export function getTauriAndroidProjectDir(webDir) {
   const manifestPath = resolve(webDir, "src-tauri/Cargo.toml");
@@ -45,5 +45,6 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  process.stdout.write(getTauriAndroidProjectDir(resolve(process.cwd(), "web")) + "\n");
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  process.stdout.write(getTauriAndroidProjectDir(resolve(scriptDir, "..")) + "\n");
 }
