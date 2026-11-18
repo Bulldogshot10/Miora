@@ -52,7 +52,7 @@ The component setup is compatible with shadcn-svelte's CLI and token conventions
 
 ~~~sh
 cd web
-npm install
+npm ci
 npm run dev
 ~~~
 
@@ -62,7 +62,7 @@ Open the Vite URL shown in the terminal. Browser preview data stays in that brow
 
 ~~~sh
 cd web
-npm install
+npm ci
 npm run tauri -- dev
 ~~~
 
@@ -74,7 +74,7 @@ Install Android Studio, Java 17, Android SDK Platform 36, and Android NDK r30. C
 
 ~~~sh
 cd web
-npm install
+npm ci
 npm run tauri:android:init
 npm run tauri:android:build
 ~~~
@@ -101,15 +101,21 @@ From the repository root:
 
 ~~~sh
 cargo fmt --all -- --check
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
 ~~~
 
 The Tauri host can be checked separately:
 
 ~~~sh
-cargo check --manifest-path web/src-tauri/Cargo.toml --all-targets
+cargo check --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 ~~~
+
+## Reproducible builds
+
+The repository tracks all three dependency lockfiles: `Cargo.lock`, `web/src-tauri/Cargo.lock`, and `web/package-lock.json`. Install JavaScript dependencies with `npm ci`; use Cargo's `--locked` flag for builds and checks. CI verifies the lockfiles with `cargo fetch --locked` before any compilation and fails if a manifest change would rewrite them.
+
+The build toolchain is pinned in CI: Rust 1.100.0, Node.js 22.23.4, Temurin Java 17.0.21+9, Android SDK Platform 36, Android Build Tools 36.0.0, and Android NDK 30.0.16248370. CI and release use the same committed dependency resolution.
 
 ## CI and releases
 
