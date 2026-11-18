@@ -326,7 +326,10 @@ jobs:
           git diff --exit-code -- Cargo.lock web/package-lock.json web/src-tauri/Cargo.lock
           if [ -d web/android-gradle-locks ]; then
             git diff --exit-code -- web/android-gradle-locks
-            git status --porcelain -- web/android-gradle-locks | grep . && exit 1 || true
+            if [ -n "$(git status --porcelain -- web/android-gradle-locks)" ]; then
+              echo "::error::Committed Android Gradle lockfiles changed during the build."
+              exit 1
+            fi
           fi
 
       - name: Upload debug APK
