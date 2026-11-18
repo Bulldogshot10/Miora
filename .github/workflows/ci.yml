@@ -41,40 +41,7 @@
             sleep "$((attempt * 20))"
           done
 
-          # AGP 9.3.1 requests the internal :app:androidApis lock identity
-          # when Gradle serializes release resource task inputs. It is not
-          # exposed as a resolvable Project configuration, and Gradle therefore
-          # cannot discover it through --write-locks. Its Android platform input
-          # comes from the installed SDK, not an external module dependency.
-          # Record an explicit empty lock state so strict mode verifies this
-          # remains dependency-free on every release build.
-          python3 - <<'PY'
-          from pathlib import Path
-
-          lockfile = Path("app/gradle.lockfile")
-          if not lockfile.is_file():
-              raise SystemExit("The generated :app Gradle lockfile is missing.")
-
-          lines = lockfile.read_text().splitlines()
-          empty_indexes = [index for index, line in enumerate(lines) if line.startswith("empty=")]
-          if len(empty_indexes) != 1:
-              raise SystemExit(
-                  f"Expected exactly one empty-configuration entry in {lockfile}, got {len(empty_indexes)}."
-              )
-
-          index = empty_indexes[0]
-          empty_configurations = set(filter(None, lines[index][len("empty="):].split(",")))
-          empty_configurations.add("androidApis")
-          lines[index] = "empty=" + ",".join(sorted(empty_configurations))
-          lockfile.write_text("\\n".join(lines) + "\\n")
-
-          persisted = lockfile.read_text().splitlines()
-          if "androidApis" not in next(
-              line[len("empty="):].split(",") for line in persisted if line.startswith("empty=")
-          ):
-              raise SystemExit("The :app:androidApis empty lock state was not persisted.")
-          print("Recorded :app:androidApis as an empty, strictly locked configuration.")
-          PY
+          python3 "$GITHUB_WORKSPACE/.github/scripts/record-androidapis-lock.py"
 
           tauri_android_dir="$(node "$GITHUB_WORKSPACE/web/scripts/tauri-android-project-dir.mjs")"
           test -s "$tauri_android_dir/gradle.lockfile"
