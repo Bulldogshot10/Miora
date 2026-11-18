@@ -220,6 +220,74 @@ fn confirmed_period_cannot_be_reopened_by_a_stale_status_update() {
 }
 
 #[test]
+fn encrypted_backup_snapshot_round_trips_periods_and_checkins() {
+    let source_path = temporary_database_path();
+    let restored_path = temporary_database_path();
+    let source = Repository::open(&source_path, &[0xA5; 32]).unwrap();
+    let start = date(2026, 11, 1);
+    source.add_period_start(start).unwrap();
+    source
+        .report_bleeding_status(start, date(2026, 11, 9), false, Some(date(2026, 11, 5)))
+        .unwrap();
+    let symptoms = vec![SymptomEntry {
+        code: SymptomCode::Cramps,
+        severity: Severity::Moderate,
+    }];
+    source
+        .save_daily_checkin(date(2026, 11, 3), 4, 2, &symptoms)
+        .unwrap();
+
+    let (periods, checkins) = source.export_backup_snapshot().unwrap();
+    assert_eq!(periods.len(), 1);
+    assert_eq!(periods[0].start_date, start);
+    assert_eq!(periods[0].end_date, Some(date(2026, 11, 5)));
+    assert_eq!(periods[0].last_observation, Some(date(2026, 11, 9)));
+    assert!(periods[0].end_confirmed);
+    assert_eq!(checkins.len(), 1);
+
+    let restored = Repository::open(&restored_path, &[0x5A; 32]).unwrap();
+    restored.restore_backup_snapshot(&periods, &checkins).unwrap();
+    let (restored_periods, restored_checkins) = restored.export_backup_snapshot().unwrap();
+    assert_eq!(restored_periods.len(), 1);
+    assert_eq!(restored_periods[0].start_date, start);
+    assert_eq!(restored_periods[0].end_date, Some(date(2026, 11, 5)));
+    assert_eq!(restored_periods[0].last_observation, Some(date(2026, 11, 9)));
+    assert!(restored_periods[0].end_confirmed);
+    assert_eq!(restored_checkins.len(), 1);
+    assert_eq!(restored_checkins[0].mood_score, 4);
+    assert_eq!(restored_checkins[0].energy_score, 2);
+    assert_eq!(restored_checkins[0].symptoms, symptoms);
+
+    drop(source);
+    drop(restored);
+    let _ = std::fs::remove_file(source_path);
+    let _ = std::fs::remove_file(restored_path);
+}
+
+#[test]
+fn invalid_backup_restore_rolls_back_without_destroying_existing_records() {
+    use miora::storage::repository::PeriodBackupRecord;
+
+    let path = temporary_database_path();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    let existing = date(2026, 11, 1);
+    repository.add_period_start(existing).unwrap();
+
+    let invalid = [PeriodBackupRecord {
+        start_date: date(2026, 11, 10),
+        end_date: Some(date(2026, 11, 9)),
+        flow_intensity: None,
+        last_observation: Some(date(2026, 11, 10)),
+        end_confirmed: true,
+    }];
+    assert!(repository.restore_backup_snapshot(&invalid, &[]).is_err());
+    assert_eq!(repository.period_start_dates().unwrap(), vec![existing]);
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn daily_checkin_query_includes_days_without_symptoms() {
     let path = temporary_database_path();
     let repository = Repository::open(&path, &[0xA5; 32]).unwrap();

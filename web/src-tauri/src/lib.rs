@@ -14,7 +14,9 @@ use miora::engine::{
     statistics::mean,
     symptom_model::{probability_on_cycle_day, SymptomObservation},
 };
-use miora::storage::repository::{PeriodBleedingRecord, Repository};
+use miora::storage::repository::{
+    DailyCheckinBackupRecord, PeriodBackupRecord, PeriodBleedingRecord, Repository,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use zeroize::Zeroizing;
@@ -88,6 +90,25 @@ struct DashboardSnapshot {
     phase: Option<CyclePhaseSnapshot>,
     symptom_patterns: Vec<SymptomPatternSnapshot>,
     bleeding_prompt: Option<BleedingPrompt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BackupPeriodInput {
+    start_date: String,
+    end_date: Option<String>,
+    flow_intensity: Option<i32>,
+    last_observation: Option<String>,
+    end_confirmed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BackupDocument {
+    format: String,
+    version: u32,
+    periods: Vec<BackupPeriodInput>,
+    checkins: Vec<DailyCheckinInput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
@@ -552,6 +573,124 @@ fn report_bleeding_status(
 }
 
 #[tauri::command]
+fn export_backup(backend: State<'_, BackendState>) -> Result<BackupDocument, String> {
+    let repository = backend
+        .repository
+        .lock()
+        .map_err(|_| "Database lock is unavailable.".to_string())?;
+    let (periods, checkins) = repository
+        .export_backup_snapshot()
+        .map_err(|error| error.to_string())?;
+
+    Ok(BackupDocument {
+        format: "miora-backup-data".to_string(),
+        version: 1,
+        periods: periods
+            .into_iter()
+            .map(|record| BackupPeriodInput {
+                start_date: record.start_date.to_string(),
+                end_date: record.end_date.map(|date| date.to_string()),
+                flow_intensity: record.flow_intensity,
+                last_observation: record.last_observation.map(|date| date.to_string()),
+                end_confirmed: record.end_confirmed,
+            })
+            .collect(),
+        checkins: checkins
+            .into_iter()
+            .map(|record| DailyCheckinInput {
+                date: record.date.to_string(),
+                mood_score: record.mood_score,
+                energy_score: record.energy_score,
+                symptoms: record
+                    .symptoms
+                    .into_iter()
+                    .map(|entry| SymptomInput {
+                        code: entry.code.as_str().to_string(),
+                        severity: entry.severity.as_i32(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    })
+}
+
+#[tauri::command]
+fn restore_backup(
+    backup: BackupDocument,
+    backend: State<'_, BackendState>,
+) -> Result<DashboardSnapshot, String> {
+    if backup.format != "miora-backup-data" || backup.version != 1 {
+        return Err("This backup format or version is not supported.".to_string());
+    }
+    if backup.periods.len() > 10_000 || backup.checkins.len() > 100_000 {
+        return Err("The backup contains more records than Miora supports.".to_string());
+    }
+
+    let today = Zoned::now().date();
+    let mut periods = Vec::with_capacity(backup.periods.len());
+    for record in backup.periods {
+        let start_date = record.start_date
+            .parse::<NaiveDate>()
+            .map_err(|_| "A backup period has an invalid start date.".to_string())?;
+        let end_date = record.end_date
+            .map(|value| value.parse::<NaiveDate>())
+            .transpose()
+            .map_err(|_| "A backup period has an invalid end date.".to_string())?;
+        let last_observation = record.last_observation
+            .map(|value| value.parse::<NaiveDate>())
+            .transpose()
+            .map_err(|_| "A backup period has an invalid bleeding observation date.".to_string())?;
+
+        if start_date > today
+            || end_date.is_some_and(|date| date > today)
+            || last_observation.is_some_and(|date| date > today)
+        {
+            return Err("The backup contains a period or bleeding date in the future.".to_string());
+        }
+
+        periods.push(PeriodBackupRecord {
+            start_date,
+            end_date,
+            flow_intensity: record.flow_intensity,
+            last_observation,
+            end_confirmed: record.end_confirmed,
+        });
+    }
+
+    let mut checkins = Vec::with_capacity(backup.checkins.len());
+    for record in backup.checkins {
+        let date = record.date
+            .parse::<NaiveDate>()
+            .map_err(|_| "A backup check-in has an invalid date.".to_string())?;
+        if date > today {
+            return Err("The backup contains a check-in date in the future.".to_string());
+        }
+
+        let mut symptoms = Vec::with_capacity(record.symptoms.len());
+        for item in record.symptoms {
+            let code = SymptomCode::parse_key(&item.code)
+                .ok_or_else(|| format!("Unknown backup symptom code: {}", item.code))?;
+            let severity = Severity::from_i32(item.severity)
+                .ok_or_else(|| "A backup symptom severity must be between 1 and 3.".to_string())?;
+            symptoms.push(SymptomEntry { code, severity });
+        }
+
+        checkins.push(DailyCheckinBackupRecord {
+            date,
+            mood_score: record.mood_score,
+            energy_score: record.energy_score,
+            symptoms,
+        });
+    }
+
+    let repository = backend.repository.lock()
+        .map_err(|_| "Database lock is unavailable.".to_string())?;
+    repository.restore_backup_snapshot(&periods, &checkins)
+        .map_err(|error| error.to_string())?;
+    dashboard_snapshot(&repository)
+}
+
+#[tauri::command]
 fn get_daily_checkin(
     date: String,
     backend: State<'_, BackendState>,
@@ -640,7 +779,9 @@ pub fn run() {
             log_period_start,
             report_bleeding_status,
             get_daily_checkin,
-            save_daily_checkin
+            save_daily_checkin,
+            export_backup,
+            restore_backup
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Miora");

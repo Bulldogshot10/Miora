@@ -106,6 +106,23 @@ pub struct DailyCheckinRecord {
     pub symptoms: Vec<SymptomEntry>,
 }
 
+#[derive(Debug, Clone)]
+pub struct PeriodBackupRecord {
+    pub start_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+    pub flow_intensity: Option<i32>,
+    pub last_observation: Option<NaiveDate>,
+    pub end_confirmed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DailyCheckinBackupRecord {
+    pub date: NaiveDate,
+    pub mood_score: i32,
+    pub energy_score: i32,
+    pub symptoms: Vec<SymptomEntry>,
+}
+
 pub type DailySymptomHistory = Vec<(NaiveDate, Vec<SymptomCode>)>;
 
 pub struct Repository {
@@ -495,6 +512,196 @@ impl Repository {
         }
 
         Ok(grouped.into_iter().collect())
+    }
+
+    /// Export every user-authored record needed to recreate the local tracker.
+    pub fn export_backup_snapshot(
+        &self,
+    ) -> Result<(Vec<PeriodBackupRecord>, Vec<DailyCheckinBackupRecord>), Box<dyn std::error::Error>> {
+        let periods = {
+            let mut statement = self.database.connection().prepare(
+                "
+                SELECT start_date, end_date, flow_intensity,
+                       last_bleeding_observation, bleeding_end_confirmed
+                FROM periods
+                ORDER BY start_date ASC
+                ",
+            )?;
+            let rows = statement.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i32>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, bool>(4)?,
+                ))
+            })?;
+            let mut records = Vec::new();
+            for row in rows {
+                let (start, end, flow, observation, confirmed) = row?;
+                records.push(PeriodBackupRecord {
+                    start_date: start.parse::<NaiveDate>()?,
+                    end_date: end.map(|value| value.parse::<NaiveDate>()).transpose()?,
+                    flow_intensity: flow,
+                    last_observation: observation
+                        .map(|value| value.parse::<NaiveDate>())
+                        .transpose()?,
+                    end_confirmed: confirmed,
+                });
+            }
+            records
+        };
+
+        let checkin_dates = {
+            let mut statement = self.database.connection().prepare(
+                "SELECT checkin_date FROM daily_checkins ORDER BY checkin_date ASC",
+            )?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+            let mut dates = Vec::new();
+            for row in rows {
+                dates.push(row?.parse::<NaiveDate>()?);
+            }
+            dates
+        };
+
+        let mut checkins = Vec::with_capacity(checkin_dates.len());
+        for date in checkin_dates {
+            let record = self
+                .daily_checkin(date)?
+                .ok_or("A daily check-in disappeared during backup export.")?;
+            checkins.push(DailyCheckinBackupRecord {
+                date,
+                mood_score: record.mood_score,
+                energy_score: record.energy_score,
+                symptoms: record.symptoms,
+            });
+        }
+
+        Ok((periods, checkins))
+    }
+
+    /// Replace the current dataset atomically with a fully validated backup.
+    pub fn restore_backup_snapshot(
+        &self,
+        periods: &[PeriodBackupRecord],
+        checkins: &[DailyCheckinBackupRecord],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::collections::BTreeSet;
+
+        let mut ordered_periods = periods.to_vec();
+        ordered_periods.sort_by_key(|record| record.start_date);
+        let mut period_dates = BTreeSet::new();
+
+        for record in &ordered_periods {
+            if !period_dates.insert(record.start_date) {
+                return Err("The backup contains duplicate period start dates.".into());
+            }
+            if record.end_date.is_some_and(|end| end < record.start_date) {
+                return Err("A backup period ends before it starts.".into());
+            }
+            if record
+                .last_observation
+                .is_some_and(|observation| observation < record.start_date)
+            {
+                return Err("A backup bleeding observation precedes its period start.".into());
+            }
+            if let (Some(end), Some(observation)) =
+                (record.end_date, record.last_observation)
+            {
+                if observation < end {
+                    return Err("A backup bleeding observation precedes its recorded end date.".into());
+                }
+            }
+            if record.flow_intensity.is_some_and(|value| !(1..=3).contains(&value)) {
+                return Err("A backup period has an invalid flow intensity.".into());
+            }
+            if record.end_confirmed
+                && (record.end_date.is_none() || record.last_observation.is_none())
+            {
+                return Err("A confirmed backup period is missing its end or observation date.".into());
+            }
+        }
+
+        for pair in ordered_periods.windows(2) {
+            let next_start = pair[1].start_date;
+            if pair[0]
+                .end_date
+                .is_some_and(|end| end >= next_start)
+                || pair[0]
+                    .last_observation
+                    .is_some_and(|observation| observation >= next_start)
+            {
+                return Err("The backup contains overlapping period or bleeding records.".into());
+            }
+        }
+
+        let mut checkin_dates = BTreeSet::new();
+        for record in checkins {
+            if !checkin_dates.insert(record.date) {
+                return Err("The backup contains duplicate daily check-in dates.".into());
+            }
+            if !(1..=5).contains(&record.mood_score)
+                || !(1..=5).contains(&record.energy_score)
+            {
+                return Err("A backup check-in has an invalid mood or energy score.".into());
+            }
+            if record.symptoms.len() > 5 {
+                return Err("A backup check-in contains too many symptoms.".into());
+            }
+            let mut symptom_codes = BTreeSet::new();
+            for symptom in &record.symptoms {
+                if !symptom_codes.insert(symptom.code.as_str()) {
+                    return Err("A backup check-in contains a duplicate symptom.".into());
+                }
+            }
+        }
+
+        let transaction = self.database.connection().unchecked_transaction()?;
+        transaction.execute("DELETE FROM symptoms", [])?;
+        transaction.execute("DELETE FROM daily_checkins", [])?;
+        transaction.execute("DELETE FROM periods", [])?;
+
+        for record in &ordered_periods {
+            transaction.execute(
+                "
+                INSERT INTO periods (
+                    start_date, end_date, flow_intensity,
+                    last_bleeding_observation, bleeding_end_confirmed
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ",
+                params![
+                    record.start_date.to_string(),
+                    record.end_date.map(|date| date.to_string()),
+                    record.flow_intensity,
+                    record.last_observation.map(|date| date.to_string()),
+                    record.end_confirmed
+                ],
+            )?;
+        }
+
+        for record in checkins {
+            transaction.execute(
+                "
+                INSERT INTO daily_checkins (checkin_date, mood_score, energy_score)
+                VALUES (?1, ?2, ?3)
+                ",
+                params![record.date.to_string(), record.mood_score, record.energy_score],
+            )?;
+            let checkin_id = transaction.last_insert_rowid();
+            for symptom in &record.symptoms {
+                transaction.execute(
+                    "
+                    INSERT INTO symptoms (checkin_id, symptom_code, severity)
+                    VALUES (?1, ?2, ?3)
+                    ",
+                    params![checkin_id, symptom.code.as_str(), symptom.severity.as_i32()],
+                )?;
+            }
+        }
+
+        transaction.commit()?;
+        Ok(())
     }
 
     pub fn daily_checkin_count(&self) -> Result<usize, rusqlite::Error> {
