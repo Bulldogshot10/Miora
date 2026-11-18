@@ -436,7 +436,8 @@ mod tests {
 
         assert_eq!(estimate.cycle_day, 50);
         assert_eq!(estimate.phase, CyclePhase::Uncertain);
-        assert!((estimate.probabilities.uncertain - 1.0).abs() < 1e-9);
+        assert!(estimate.probabilities.uncertain > 0.7);
+        assert!(estimate.probabilities.uncertain < 1.0);
     }
 
     #[test]

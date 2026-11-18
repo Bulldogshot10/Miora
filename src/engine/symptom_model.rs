@@ -1,10 +1,12 @@
+use crate::engine::hierarchical::hierarchical_binary_probability;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SymptomObservation {
     pub cycle_day: u32,
     pub occurred: bool,
 }
 
-/// Laplace-smoothed probability for one symptom on one relative cycle day.
+/// A cycle-day estimate partially pooled toward the user's overall symptom rate.
 pub fn probability_on_cycle_day(
     observations: &[SymptomObservation],
     target_cycle_day: u32,
@@ -14,11 +16,24 @@ pub fn probability_on_cycle_day(
         .filter(|entry| entry.cycle_day == target_cycle_day)
         .map(|entry| entry.occurred)
         .collect();
-
     if matching.is_empty() {
         return None;
     }
 
-    let positive = matching.iter().filter(|occurred| **occurred).count() as f64;
-    Some((positive + 1.0) / (matching.len() as f64 + 2.0))
+    let other: Vec<bool> = observations
+        .iter()
+        .filter(|entry| entry.cycle_day != target_cycle_day)
+        .map(|entry| entry.occurred)
+        .collect();
+
+    let matching_successes = matching.iter().filter(|occurred| **occurred).count();
+    let other_successes = other.iter().filter(|occurred| **occurred).count();
+
+    hierarchical_binary_probability(
+        matching_successes,
+        matching.len(),
+        other_successes,
+        other.len(),
+        4.0,
+    )
 }

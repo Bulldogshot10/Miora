@@ -1,7 +1,7 @@
 use jiff::civil::Date as NaiveDate;
 
 use crate::domain::cycle::{cycle_day, cycle_length_days};
-use crate::engine::cycle_estimator::estimate_next_period;
+use crate::engine::cycle_estimator::estimate_next_period_at;
 use crate::engine::statistics::mean;
 use crate::storage::repository::Repository;
 
@@ -33,7 +33,7 @@ impl AppState {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let starts = repository.period_start_dates()?;
         let latest = starts.last().copied();
-        let prediction = estimate_next_period(&starts);
+        let prediction = estimate_next_period_at(&starts, today);
 
         let (cycle_day_label, last_period_label) = match latest {
             Some(start) => {

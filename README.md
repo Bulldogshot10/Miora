@@ -95,6 +95,19 @@ Miora includes a resizable **Daily Check-in** home-screen widget. Add it from th
 
 The widget calls the Rust check-in API through UniFFI and writes to the same private SQLite repository used by the Tauri app. Rust owns validation and persistence; Kotlin only handles Android widget UI and lifecycle. Unsaved widget drafts are encrypted with an Android Keystore AES-256-GCM key before they are stored in SharedPreferences. Open Miora once after installation to initialize the database. Android widget source files live in `web/android-widget/`; the Android build command generates Kotlin bindings, adds the JNA runtime, copies the widget sources into Tauri's generated Android project, and registers the widget receiver.
 
+## Statistical inference engine
+
+The native Rust core combines four complementary statistical components:
+
+- **Bayesian online changepoint detection (BOCPD):** tracks posterior run-length probabilities and downweights observations that are unlikely to belong to the current cycle-length regime.
+- **Hierarchical partial pooling:** shrinks sparse individual estimates toward a weak population prior. Symptom probabilities use a Beta-Binomial hierarchy, pooling cycle-day estimates toward the individual's overall symptom rate.
+- **Weibull and Gamma survival models:** both candidates are fitted with right-censored likelihoods. Their predictive CDFs are model-averaged, then blended with the hierarchical predictive distribution according to the amount of personal evidence.
+- **Censoring and observation quality:** the active cycle contributes a right-censored observation each day. Completed intervals outside the supported 15–60 day modelling range are classified separately; gaps longer than 60 days are flagged as potentially missed period logs and excluded from the cycle-length fit.
+
+The median/MAD estimator remains available as `estimate_next_period_baseline` for rolling-origin comparisons. The native dashboard prediction uses the P10/P50/P90 quantiles from the survival inference pipeline. All inference runs locally in Rust and introduces no new runtime dependency or network requirement.
+
+The browser-only localStorage preview retains its development fallback estimator; the production Android/Tauri application uses the Rust inference engine.
+
 ## Rust checks
 
 From the repository root:

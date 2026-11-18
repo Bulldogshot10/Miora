@@ -393,6 +393,7 @@ function browserSnapshot(): DashboardSnapshot {
   let earliestNextPeriodStart: string | null = null;
   let latestNextPeriodStart: string | null = null;
 
+  // Development-only localStorage fallback; native Tauri uses the Rust survival engine.
   if (latest && lengths.length >= 2 && averageCycleLength !== null) {
     const sorted = [...lengths].sort((a, b) => a - b);
     const center = median(sorted) ?? 0;

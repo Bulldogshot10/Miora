@@ -12,7 +12,7 @@ pub struct CycleLengthPosterior {
 
 impl Default for CycleLengthPosterior {
     fn default() -> Self {
-        Self::new(21, 45)
+        Self::new(15, 60)
     }
 }
 

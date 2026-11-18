@@ -12,7 +12,7 @@ fn symptom_codes_have_stable_storage_keys() {
 }
 
 #[test]
-fn symptom_probability_uses_only_matching_cycle_days() {
+fn symptom_probability_partially_pools_sparse_cycle_day_observations() {
     let history = [
         SymptomObservation {
             cycle_day: 22,
@@ -33,7 +33,7 @@ fn symptom_probability_uses_only_matching_cycle_days() {
     ];
 
     let probability = probability_on_cycle_day(&history, 22).unwrap();
-    assert!((probability - 0.6).abs() < f64::EPSILON);
+    assert!((0.62..0.64).contains(&probability));
 }
 
 #[test]

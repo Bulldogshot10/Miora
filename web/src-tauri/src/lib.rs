@@ -9,7 +9,7 @@ use miora::domain::{
     symptom::{Severity, SymptomCode, SymptomEntry},
 };
 use miora::engine::{
-    cycle_estimator::estimate_next_period,
+    cycle_estimator::estimate_next_period_at,
     cycle_phase::{estimate_bleeding_duration, estimate_cycle_phase},
     statistics::mean,
     symptom_model::{probability_on_cycle_day, SymptomObservation},
@@ -401,7 +401,7 @@ fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, Stri
         .filter(|days| (15.0..=60.0).contains(days))
         .collect();
 
-    let prediction = estimate_next_period(&starts);
+    let prediction = estimate_next_period_at(&starts, today);
     let checkin_dates = repository
         .daily_checkin_dates()
         .map_err(|error| error.to_string())?;

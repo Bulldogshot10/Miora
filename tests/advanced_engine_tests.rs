@@ -1,0 +1,75 @@
+use miora::engine::changepoint::detect_cycle_regimes;
+use miora::engine::hierarchical::{PopulationPrior, infer_cycle_length};
+use miora::engine::observation::{CycleObservation, CycleObservationKind};
+use miora::engine::survival::predict_next_cycle;
+use miora::engine::survival::gamma::Gamma;
+use miora::engine::survival::weibull::Weibull;
+
+#[test]
+fn observation_quality_marks_long_gaps_as_potentially_missed_logs() {
+    assert_eq!(
+        CycleObservation::completed_interval(28).kind,
+        CycleObservationKind::Completed
+    );
+    assert_eq!(
+        CycleObservation::completed_interval(75).kind,
+        CycleObservationKind::PotentiallyMissedPeriodLog
+    );
+    assert_eq!(
+        CycleObservation::right_censored(34).kind,
+        CycleObservationKind::RightCensored
+    );
+}
+
+#[test]
+fn changepoint_detector_downweights_observations_from_an_old_regime() {
+    let observations = [28.0, 29.0, 28.0, 29.0, 45.0, 46.0, 45.0, 44.0];
+    let result = detect_cycle_regimes(&observations);
+
+    assert_eq!(result.regime_weights.len(), observations.len());
+    assert!(result.regime_weights.last().copied().unwrap() > 0.99);
+    assert!(result.regime_weights[0] < result.regime_weights[7]);
+    assert!(result.current_changepoint_probability.is_finite());
+}
+
+#[test]
+fn hierarchical_cycle_posterior_shrinks_sparse_personal_history() {
+    let lengths = [36.0, 37.0];
+    let weights = [1.0, 1.0];
+    let posterior = infer_cycle_length(&lengths, &weights, PopulationPrior::default());
+
+    assert!(posterior.mean_cycle_days > 28.0);
+    assert!(posterior.mean_cycle_days < 36.5);
+    assert!(posterior.predictive_sd > posterior.posterior_sd);
+}
+
+#[test]
+fn weibull_and_gamma_distributions_have_valid_cdfs() {
+    let weibull = Weibull {
+        shape: 1.0,
+        scale: 10.0,
+    };
+    let gamma = Gamma {
+        shape: 1.0,
+        scale: 10.0,
+    };
+
+    assert!((weibull.cdf(10.0) - (1.0 - (-1.0_f64).exp())).abs() < 1e-10);
+    assert!((gamma.cdf(10.0) - (1.0 - (-1.0_f64).exp())).abs() < 1e-8);
+}
+
+#[test]
+fn survival_forecast_conditions_on_the_current_censored_cycle() {
+    let lengths = [27.0, 28.0, 29.0, 28.0, 30.0, 29.0];
+    let weights = [1.0; 6];
+    let posterior = infer_cycle_length(&lengths, &weights, PopulationPrior::default());
+
+    let uncensored = predict_next_cycle(&lengths, &weights, None, posterior).unwrap();
+    let censored = predict_next_cycle(&lengths, &weights, Some(35.0), posterior).unwrap();
+
+    assert!(uncensored.p10_days <= uncensored.median_days);
+    assert!(uncensored.median_days <= uncensored.p90_days);
+    assert!(censored.p10_days > 35);
+    assert!(censored.median_days > uncensored.median_days);
+    assert!(censored.p90_days >= censored.median_days);
+}
