@@ -488,29 +488,9 @@ fn log_period_start(
         .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
 
-    if let Some(end) = parsed_end {
-        let starts = repository
-            .period_start_dates()
-            .map_err(|error| error.to_string())?;
-        if starts
-            .iter()
-            .any(|next_start| *next_start > parsed_start && end >= *next_start)
-        {
-            return Err(
-                "The last bleeding day must be before the next recorded period start.".to_string(),
-            );
-        }
-    }
-
     repository
-        .add_period_start(parsed_start)
+        .add_period_start_with_end(parsed_start, parsed_end)
         .map_err(|error| error.to_string())?;
-
-    if let Some(end) = parsed_end {
-        repository
-            .set_period_end(parsed_start, end)
-            .map_err(|error| error.to_string())?;
-    }
 
     dashboard_snapshot(&repository)
 }

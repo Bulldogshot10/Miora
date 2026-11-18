@@ -14,6 +14,89 @@ pub struct PeriodBleedingRecord {
     pub end_confirmed: bool,
 }
 
+fn ensure_period_start_allowed(
+    transaction: &rusqlite::Transaction<'_>,
+    start: NaiveDate,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let start_text = start.to_string();
+    let overlaps_previous: bool = transaction.query_row(
+        "
+        SELECT EXISTS(
+            SELECT 1 FROM periods
+            WHERE start_date < ?1
+              AND end_date IS NOT NULL
+              AND end_date >= ?1
+        )
+        ",
+        params![start_text],
+        |row| row.get(0),
+    )?;
+    if overlaps_previous {
+        return Err(
+            "The new period start overlaps a previously recorded bleeding interval.".into(),
+        );
+    }
+    Ok(())
+}
+
+fn set_period_end_in_transaction(
+    transaction: &rusqlite::Transaction<'_>,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if end < start {
+        return Err("The last bleeding day must be on or after the first day.".into());
+    }
+
+    let start_text = start.to_string();
+    let previous_observation: Option<String> = transaction
+        .query_row(
+            "SELECT last_bleeding_observation FROM periods WHERE start_date = ?1",
+            params![start_text],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten()
+        .ok_or("The period start date could not be found.")?;
+    let previous_observation = previous_observation.parse::<NaiveDate>()?;
+    if end < previous_observation {
+        return Err(
+            "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
+                .into(),
+        );
+    }
+
+    let next_start: Option<String> = transaction.query_row(
+        "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
+        params![start_text],
+        |row| row.get(0),
+    )?;
+    if let Some(next_start) = next_start {
+        let next_start = next_start.parse::<NaiveDate>()?;
+        if end >= next_start {
+            return Err(
+                "The last bleeding day must be before the next recorded period start.".into(),
+            );
+        }
+    }
+
+    let changed = transaction.execute(
+        "
+        UPDATE periods
+        SET end_date = ?1,
+            last_bleeding_observation = ?1,
+            bleeding_end_confirmed = 1
+        WHERE start_date = ?2
+        ",
+        params![end.to_string(), start_text],
+    )?;
+    if changed == 0 {
+        return Err("The period start date could not be found.".into());
+    }
+    Ok(())
+}
+
+
 #[derive(Debug, Clone)]
 pub struct DailyCheckinRecord {
     pub mood_score: i32,
@@ -35,32 +118,37 @@ impl Repository {
     }
 
     pub fn add_period_start(&self, date: NaiveDate) -> Result<bool, Box<dyn std::error::Error>> {
-        let date_text = date.to_string();
-        let overlaps_previous: bool = self.database.connection().query_row(
-            "
-            SELECT EXISTS(
-                SELECT 1 FROM periods
-                WHERE start_date < ?1
-                  AND end_date IS NOT NULL
-                  AND end_date >= ?1
-            )
-            ",
-            params![date_text],
-            |row| row.get(0),
-        )?;
+        self.add_period_start_with_end(date, None)
+    }
 
-        if overlaps_previous {
-            return Err(
-                "The new period start overlaps a previously recorded bleeding interval.".into(),
-            );
+    /// Insert a period start and optionally confirm its end in one transaction.
+    /// A failed end-date validation rolls back the newly inserted start.
+    pub fn add_period_start_with_end(
+        &self,
+        start: NaiveDate,
+        end: Option<NaiveDate>,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        if let Some(end) = end {
+            if end < start {
+                return Err("The last bleeding day must be on or after the first day.".into());
+            }
         }
 
-        let changed = self.database.connection().execute(
-            "INSERT OR IGNORE INTO periods (start_date) VALUES (?1)",
-            params![date_text],
-        )?;
+        let transaction = self.database.connection().unchecked_transaction()?;
+        ensure_period_start_allowed(&transaction, start)?;
 
-        Ok(changed == 1)
+        let start_text = start.to_string();
+        let inserted = transaction.execute(
+            "INSERT OR IGNORE INTO periods (start_date) VALUES (?1)",
+            params![start_text],
+        )? == 1;
+
+        if let Some(end) = end {
+            set_period_end_in_transaction(&transaction, start, end)?;
+        }
+
+        transaction.commit()?;
+        Ok(inserted)
     }
 
     pub fn set_period_end(
@@ -68,62 +156,9 @@ impl Repository {
         start: NaiveDate,
         end: NaiveDate,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if end < start {
-            return Err("The last bleeding day must be on or after the first day.".into());
-        }
-
-        let start_text = start.to_string();
-        let end_text = end.to_string();
-        let previous_observation: Option<String> = self
-            .database
-            .connection()
-            .query_row(
-                "SELECT last_bleeding_observation FROM periods WHERE start_date = ?1",
-                params![start_text],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten();
-        if let Some(previous_observation) = previous_observation {
-            let previous_observation = previous_observation.parse::<NaiveDate>()?;
-            if end < previous_observation {
-                return Err(
-                    "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
-                        .into(),
-                );
-            }
-        }
-
-        let next_start: Option<String> = self.database.connection().query_row(
-            "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
-            params![start_text],
-            |row| row.get(0),
-        )?;
-
-        if let Some(next_start) = next_start {
-            let next_start = next_start.parse::<NaiveDate>()?;
-            if end >= next_start {
-                return Err(
-                    "The last bleeding day must be before the next recorded period start.".into(),
-                );
-            }
-        }
-
-        let changed = self.database.connection().execute(
-            "
-            UPDATE periods
-            SET end_date = ?1,
-                last_bleeding_observation = ?1,
-                bleeding_end_confirmed = 1
-            WHERE start_date = ?2
-            ",
-            params![end_text, start_text],
-        )?;
-
-        if changed == 0 {
-            return Err("The period start date could not be found.".into());
-        }
-
+        let transaction = self.database.connection().unchecked_transaction()?;
+        set_period_end_in_transaction(&transaction, start, end)?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -138,88 +173,89 @@ impl Repository {
             return Err("The observation date cannot be before the period start.".into());
         }
 
+        let transaction = self.database.connection().unchecked_transaction()?;
         let start_text = start.to_string();
-        let observation_text = observation_date.to_string();
+        let previous: Option<(Option<String>, bool)> = transaction
+            .query_row(
+                "SELECT last_bleeding_observation, bleeding_end_confirmed
+                 FROM periods WHERE start_date = ?1",
+                params![start_text],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
 
-        if still_bleeding {
-            let changed = self.database.connection().execute(
-                "
-                UPDATE periods
-                SET end_date = ?1,
-                    last_bleeding_observation = ?1,
-                    bleeding_end_confirmed = 0
-                WHERE start_date = ?2
-                ",
-                params![observation_text, start_text],
-            )?;
+        let Some((previous_observation, end_confirmed)) = previous else {
+            return Err("The period start date could not be found.".into());
+        };
+        if end_confirmed {
+            return Err("This period has already been marked as finished.".into());
+        }
 
-            if changed == 0 {
-                return Err("The period start date could not be found.".into());
+        if let Some(previous_observation) = previous_observation {
+            let previous_observation = previous_observation.parse::<NaiveDate>()?;
+            if observation_date < previous_observation {
+                return Err("The bleeding observation date cannot move backwards.".into());
             }
+        }
+
+        let next_start: Option<String> = transaction.query_row(
+            "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
+            params![start_text],
+            |row| row.get(0),
+        )?;
+        if let Some(next_start) = next_start {
+            let next_start = next_start.parse::<NaiveDate>()?;
+            if observation_date >= next_start {
+                return Err(
+                    "The bleeding observation must be before the next recorded period start."
+                        .into(),
+                );
+            }
+        }
+
+        let (last_bleeding_date, confirmed) = if still_bleeding {
+            (observation_date, false)
         } else {
             let last_bleeding_date =
                 last_bleeding_date.ok_or("Select the last day you were bleeding.")?;
-
             if last_bleeding_date < start || last_bleeding_date > observation_date {
                 return Err(
                     "The last bleeding day must be between the period start and today's check."
                         .into(),
                 );
             }
-
-            let previous_observation: Option<String> = self
-                .database
-                .connection()
-                .query_row(
-                    "SELECT last_bleeding_observation FROM periods WHERE start_date = ?1",
-                    params![start_text],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .flatten();
             if let Some(previous_observation) = previous_observation {
                 let previous_observation = previous_observation.parse::<NaiveDate>()?;
                 if last_bleeding_date < previous_observation {
                     return Err(
-                        "The last bleeding day cannot be earlier than a previously confirmed bleeding observation."
+                        "The last bleeding day cannot be earlier than a previously recorded bleeding observation."
                             .into(),
                     );
                 }
             }
+            (last_bleeding_date, true)
+        };
 
-            let last_bleeding_text = last_bleeding_date.to_string();
-            let next_start: Option<String> = self.database.connection().query_row(
-                "SELECT MIN(start_date) FROM periods WHERE start_date > ?1",
-                params![start_text],
-                |row| row.get(0),
-            )?;
-
-            if let Some(next_start) = next_start {
-                let next_start = next_start.parse::<NaiveDate>()?;
-                if last_bleeding_date >= next_start {
-                    return Err(
-                        "The last bleeding day must be before the next recorded period start."
-                            .into(),
-                    );
-                }
-            }
-
-            let changed = self.database.connection().execute(
-                "
-                UPDATE periods
-                SET end_date = ?1,
-                    last_bleeding_observation = ?1,
-                    bleeding_end_confirmed = 1
-                WHERE start_date = ?2
-                ",
-                params![last_bleeding_text, start_text],
-            )?;
-
-            if changed == 0 {
-                return Err("The period start date could not be found.".into());
-            }
+        let changed = transaction.execute(
+            "
+            UPDATE periods
+            SET end_date = ?1,
+                last_bleeding_observation = ?2,
+                bleeding_end_confirmed = ?3
+            WHERE start_date = ?4
+            ",
+            params![
+                last_bleeding_date.to_string(),
+                observation_date.to_string(),
+                confirmed,
+                start_text
+            ],
+        )?;
+        if changed == 0 {
+            return Err("The period start date could not be found.".into());
         }
 
+        transaction.commit()?;
         Ok(())
     }
 

@@ -146,6 +146,80 @@ fn period_end_must_precede_the_next_period_start() {
 }
 
 #[test]
+fn period_start_and_confirmed_end_are_atomic() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    let next_start = date(2026, 11, 8);
+    repository.add_period_start(next_start).unwrap();
+
+    assert!(
+        repository
+            .add_period_start_with_end(date(2026, 11, 1), Some(next_start))
+            .is_err()
+    );
+    assert_eq!(repository.period_start_dates().unwrap(), vec![next_start]);
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn bleeding_observation_cannot_move_backwards_or_cross_next_period() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    let start = date(2026, 11, 1);
+    repository.add_period_start(start).unwrap();
+    repository
+        .report_bleeding_status(start, date(2026, 11, 6), true, None)
+        .unwrap();
+
+    assert!(
+        repository
+            .report_bleeding_status(start, date(2026, 11, 5), true, None)
+            .is_err()
+    );
+    assert_eq!(
+        repository
+            .latest_period_bleeding_record()
+            .unwrap()
+            .unwrap()
+            .last_observation,
+        Some(date(2026, 11, 6))
+    );
+
+    repository.add_period_start(date(2026, 11, 8)).unwrap();
+    assert!(
+        repository
+            .report_bleeding_status(start, date(2026, 11, 8), true, None)
+            .is_err()
+    );
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn confirmed_period_cannot_be_reopened_by_a_stale_status_update() {
+    let path = temporary_database_path();
+    let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
+    let start = date(2026, 11, 1);
+    repository.add_period_start(start).unwrap();
+    repository
+        .report_bleeding_status(start, date(2026, 11, 8), false, Some(date(2026, 11, 5)))
+        .unwrap();
+
+    assert!(
+        repository
+            .report_bleeding_status(start, date(2026, 11, 9), true, None)
+            .is_err()
+    );
+    assert_eq!(repository.confirmed_bleeding_durations().unwrap(), vec![5]);
+
+    drop(repository);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn daily_checkin_query_includes_days_without_symptoms() {
     let path = temporary_database_path();
     let repository = Repository::open(&path, &[0xA5; 32]).unwrap();
