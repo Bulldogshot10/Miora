@@ -89,6 +89,12 @@ src-tauri/gen/android/app/build/outputs/apk/
 
 The app supports Android API 26 and newer.
 
+### Encrypted data backup and recovery
+
+Open **Insights → Encrypted backup** in the native app. Create a backup with a passphrase of at least 12 characters, then copy the complete encrypted text into a separate file or password manager. The envelope uses PBKDF2-HMAC-SHA-256 (600,000 iterations) to derive an AES-256-GCM key, with a fresh random salt and nonce for each export. The passphrase is never stored by Miora.
+
+To move data to another device, install Miora there, open Insights, paste the encrypted backup text, enter the passphrase, and confirm restore. Restore replaces the current period and check-in dataset in one SQLite transaction; a failed validation or write leaves the existing database unchanged. Keep the passphrase separately: Miora cannot recover a lost passphrase. The encrypted backup is portable and is not tied to the Android Keystore key used for the on-device database.
+
 ### Android home-screen widget
 
 Miora includes a resizable **Daily Check-in** home-screen widget. Add it from the Android launcher widget picker. The widget lets you choose mood and energy (1–5), cycle each symptom through mild, moderate, severe, or off, and save today's entry without opening the app.

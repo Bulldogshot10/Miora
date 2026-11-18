@@ -88,3 +88,18 @@ export const EMPTY_SNAPSHOT: DashboardSnapshot = {
   symptomPatterns: [],
   bleedingPrompt: null,
 };
+
+export interface BackupPeriodInput {
+  startDate: string;
+  endDate: string | null;
+  flowIntensity: number | null;
+  lastObservation: string | null;
+  endConfirmed: boolean;
+}
+
+export interface BackupDocument {
+  format: "miora-backup-data";
+  version: 1;
+  periods: BackupPeriodInput[];
+  checkins: DailyCheckinInput[];
+}

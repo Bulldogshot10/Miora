@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BackupDocument,
   BleedingPrompt,
   CyclePhaseSnapshot,
   DashboardSnapshot,
@@ -627,4 +628,21 @@ export async function saveDailyCheckin(
   checkins.sort((a, b) => a.date.localeCompare(b.date));
   localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(checkins));
   return browserSnapshot();
+}
+
+
+export async function exportBackupDocument(): Promise<BackupDocument> {
+  if (!runningInTauri()) {
+    throw new Error("Encrypted backup is available in the native Miora app.");
+  }
+  return invoke<BackupDocument>("export_backup");
+}
+
+export async function restoreBackupDocument(
+  backup: BackupDocument,
+): Promise<DashboardSnapshot> {
+  if (!runningInTauri()) {
+    throw new Error("Backup restore is available in the native Miora app.");
+  }
+  return invoke<DashboardSnapshot>("restore_backup", { backup });
 }

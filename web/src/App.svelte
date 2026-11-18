@@ -188,7 +188,13 @@
           {busy}
         />
       {:else}
-        <InsightsScreen {snapshot} />
+        <InsightsScreen
+          {snapshot}
+          onBackupRestored={(updated) => {
+            snapshot = updated;
+            statusMessage = "Encrypted backup restored successfully.";
+          }}
+        />
       {/if}
     {/if}
 
