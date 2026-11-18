@@ -7,6 +7,7 @@ pub mod math;
 pub mod observation;
 pub mod statistics;
 pub mod survival;
+pub mod validation;
 pub mod symptom_model;
 
 pub const MIN_CYCLE_LENGTH: u32 = 15;

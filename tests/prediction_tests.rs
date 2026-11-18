@@ -48,6 +48,49 @@ fn median_mad_baseline_remains_available_for_comparison() {
 }
 
 #[test]
+fn rolling_origin_evaluation_compares_survival_and_median_mad() {
+    use jiff::ToSpan;
+    use miora::engine::validation::evaluate_rolling_origin;
+
+    let intervals = [28_i64, 29, 30, 27, 31, 28, 30, 29, 27, 31];
+    let mut starts = vec![date(2024, 1, 1)];
+    for interval in intervals {
+        let next = starts
+            .last()
+            .unwrap()
+            .checked_add(interval.days())
+            .unwrap();
+        starts.push(next);
+    }
+
+    let evaluation = evaluate_rolling_origin(&starts).unwrap();
+    assert_eq!(evaluation.censor_age_days, 14);
+    assert_eq!(evaluation.survival.predictions, intervals.len() - 2);
+    assert_eq!(
+        evaluation.median_mad_baseline.predictions,
+        evaluation.survival.predictions
+    );
+    assert_eq!(evaluation.survival.nominal_interval_level, 0.80);
+    assert!(evaluation.survival.interval_coverage.is_finite());
+    assert!((0.0..=1.0).contains(&evaluation.survival.interval_coverage));
+    assert!(evaluation.survival.mean_interval_width_days >= 0.0);
+    assert!(evaluation.survival.mean_absolute_median_error_days >= 0.0);
+    assert!(evaluation.survival.mean_interval_score >= 0.0);
+    assert!(evaluation.survival_mean_pinball_loss.is_finite());
+    assert!(evaluation.median_mad_baseline.interval_coverage.is_finite());
+}
+
+#[test]
+fn rolling_origin_evaluation_rejects_insufficient_or_invalid_settings() {
+    use miora::engine::validation::evaluate_rolling_origin_with;
+
+    let starts = [date(2024, 1, 1), date(2024, 1, 29), date(2024, 2, 26)];
+    assert!(evaluate_rolling_origin_with(&starts, 2, 14).is_none());
+    assert!(evaluate_rolling_origin_with(&starts, 1, 14).is_none());
+    assert!(evaluate_rolling_origin_with(&starts, 2, 0).is_none());
+}
+
+#[test]
 fn bayesian_posterior_updates_after_observations() {
     let mut posterior = CycleLengthPosterior::default();
     let prior_probability = posterior.probability(28).unwrap();

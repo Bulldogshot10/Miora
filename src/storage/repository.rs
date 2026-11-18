@@ -99,7 +99,6 @@ fn set_period_end_in_transaction(
     Ok(())
 }
 
-
 #[derive(Debug, Clone)]
 pub struct DailyCheckinRecord {
     pub mood_score: i32,
