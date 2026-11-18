@@ -250,9 +250,10 @@ jobs:
             sleep "$((attempt * 20))"
           done
 
-          python3 "$GITHUB_WORKSPACE/.github/scripts/record-androidapis-lock.py"
-
           tauri_android_dir="$(node "$GITHUB_WORKSPACE/web/scripts/tauri-android-project-dir.mjs")"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/record-androidapis-lock.py" \
+            "app/gradle.lockfile" \
+            "$tauri_android_dir/gradle.lockfile"
           test -s "$tauri_android_dir/gradle.lockfile"
 
           regular_lock_count="$(find . -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"

@@ -249,13 +249,16 @@ function makePhaseEstimate(
   const bleedDistribution = confirmedCurrentBleedingDays !== null
     ? new Map([[Math.max(1, confirmedCurrentBleedingDays), 1]])
     : bleedingDistribution(bleedingDurations);
+  const expectedCycleLength = intervals.length > 0
+    ? [...cycleDistribution.entries()].reduce((sum, [day, probability]) => sum + day * probability, 0)
+    : 0;
 
   if (observedBleedingThroughDay !== null && cycleDay <= observedBleedingThroughDay) {
     return {
       code: "menstrual",
       label: "Menstrual phase",
       cycleDay,
-      estimatedCycleLength: 0,
+      estimatedCycleLength: Math.round(expectedCycleLength),
       completedIntervalsUsed: intervals.length,
       completedBleedingDurationsUsed: bleedingDurations.length,
       confidence: 1,
@@ -315,10 +318,6 @@ function makePhaseEstimate(
   const mostLikely = candidates.reduce((best, candidate) => candidate[1] >= best[1] ? candidate : best);
   const confidence = mostLikely[1];
   const learning = confidence < 0.55;
-  const expectedCycleLength = intervals.length > 0
-    ? [...cycleDistribution.entries()].reduce((sum, [day, probability]) => sum + day * probability, 0)
-    : 0;
-
   return {
     code: learning ? "learning" : mostLikely[2],
     label: learning ? "Still learning your cycle" : mostLikely[3],
