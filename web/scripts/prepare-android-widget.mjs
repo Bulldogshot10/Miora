@@ -121,6 +121,49 @@ await Promise.all([
 
 const javaRoot = resolve(generatedAndroidDir, "java");
 const gradlePath = resolve(webDir, "src-tauri/gen/android/app/build.gradle.kts");
+const rootGradlePath = resolve(webDir, "src-tauri/gen/android/build.gradle.kts");
+const buildSrcGradlePath = resolve(
+  webDir,
+  "src-tauri/gen/android/buildSrc/build.gradle.kts",
+);
+
+function enableGradleLocking(source, label, lockBuildscriptClasspath = false) {
+  if (lockBuildscriptClasspath) {
+    const classpathLock =
+      "configurations.classpath {\n" +
+      "    resolutionStrategy.activateDependencyLocking()\n" +
+      "}";
+    if (!source.includes("resolutionStrategy.activateDependencyLocking()")) {
+      if (!source.includes("buildscript {")) {
+        throw new Error("Could not locate " + label + " buildscript block.");
+      }
+      source = source.replace(
+        "buildscript {",
+        "buildscript {\n    " + classpathLock.replaceAll("\n", "\n    "),
+      );
+    }
+  }
+
+  if (!source.includes("lockAllConfigurations()")) {
+    source = source.trimEnd() +
+      "\n\ndependencyLocking {\n    lockAllConfigurations()\n}\n";
+  }
+  return source;
+}
+
+async function enableGeneratedGradleDependencyLocking() {
+  let rootBuild = await readFile(rootGradlePath, "utf8");
+  let appBuild = await readFile(gradlePath, "utf8");
+  let buildSrcBuild = await readFile(buildSrcGradlePath, "utf8");
+
+  rootBuild = enableGradleLocking(rootBuild, "root", true);
+  appBuild = enableGradleLocking(appBuild, "app");
+  buildSrcBuild = enableGradleLocking(buildSrcBuild, "buildSrc");
+
+  await writeFile(rootGradlePath, rootBuild);
+  await writeFile(gradlePath, appBuild);
+  await writeFile(buildSrcGradlePath, buildSrcBuild);
+}
 const gradleWrapperPropertiesPath = resolve(
   webDir,
   "src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties",
@@ -298,6 +341,7 @@ if (!mainActivity.includes("MioraDatabaseKeyStore.getOrCreateDatabaseKey")) {
 }
 
 await verifyGradleWrapper();
+await enableGeneratedGradleDependencyLocking();
 
 let gradle = await readFile(gradlePath, "utf8");
 
