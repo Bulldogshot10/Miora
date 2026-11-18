@@ -331,6 +331,7 @@ jobs:
       - name: Build signed release smoke APK (retry Maven Central HTTP 429)
         env:
           CARGO_NET_OFFLINE: "true"
+          MIORA_GRADLE_LOCKS_DIR: ${{ runner.temp }}/miora-gradle-lockfiles
         run: |
           for attempt in 1 2 3; do
             log_file="$RUNNER_TEMP/miora-release-smoke-$attempt.log"
@@ -385,5 +386,22 @@ jobs:
               tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
               cmp web/android-gradle-locks/external/tauri-android/gradle.lockfile "$tauri_android_dir/gradle.lockfile"
             fi
+          fi
+
+          if [ -d "$RUNNER_TEMP/miora-gradle-lockfiles" ]; then
+            tauri_android_dir="$(node web/scripts/tauri-android-project-dir.mjs)"
+            while IFS= read -r -d '' file; do
+              relative_path="${file#"$RUNNER_TEMP/miora-gradle-lockfiles/"}"
+              if [ "$relative_path" = "external/tauri-android/gradle.lockfile" ]; then
+                destination="$tauri_android_dir/gradle.lockfile"
+              else
+                destination="web/src-tauri/gen/android/$relative_path"
+              fi
+              if [ ! -f "$destination" ]; then
+                echo "::error::Gradle lock artifact was not applied to release build: $relative_path"
+                exit 1
+              fi
+              cmp "$file" "$destination"
+            done < <(find "$RUNNER_TEMP/miora-gradle-lockfiles" -type f -print0 | sort -z)
           fi
 

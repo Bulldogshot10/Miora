@@ -426,39 +426,58 @@ async function listGradleLockFiles(directory, prefix = "") {
 const committedGradleLockFiles = await hasFile(committedGradleLockDirectory)
   ? await listGradleLockFiles(committedGradleLockDirectory)
   : [];
-const regularGradleLockCount = committedGradleLockFiles.filter((entry) =>
+const bootstrapGradleLockDirectory = process.env.MIORA_GRADLE_LOCKS_DIR
+  ? resolve(process.env.MIORA_GRADLE_LOCKS_DIR)
+  : null;
+const hasCommittedGradleLocks = committedGradleLockFiles.length > 0;
+const gradleLockSourceDirectory = hasCommittedGradleLocks
+  ? committedGradleLockDirectory
+  : bootstrapGradleLockDirectory;
+const gradleLockFiles = hasCommittedGradleLocks
+  ? committedGradleLockFiles
+  : gradleLockSourceDirectory && await hasFile(gradleLockSourceDirectory)
+    ? await listGradleLockFiles(gradleLockSourceDirectory)
+    : [];
+const regularGradleLockCount = gradleLockFiles.filter((entry) =>
   entry.endsWith("/gradle.lockfile") || entry === "gradle.lockfile"
 ).length;
-const buildscriptGradleLockCount = committedGradleLockFiles.filter((entry) =>
+const buildscriptGradleLockCount = gradleLockFiles.filter((entry) =>
   entry.endsWith("/buildscript-gradle.lockfile") || entry === "buildscript-gradle.lockfile"
 ).length;
-const hasCommittedGradleLocks = committedGradleLockFiles.length > 0;
+const hasGradleLocks = gradleLockFiles.length > 0;
 const tauriAndroidLockRelativePath = "external/tauri-android/gradle.lockfile";
 const tauriAndroidProjectDir =
-  hasCommittedGradleLocks && committedGradleLockFiles.includes(tauriAndroidLockRelativePath)
+  hasGradleLocks && gradleLockFiles.includes(tauriAndroidLockRelativePath)
     ? getTauriAndroidProjectDir(webDir)
     : null;
 
-if (hasCommittedGradleLocks) {
+if (hasGradleLocks) {
   if (regularGradleLockCount < 3 || buildscriptGradleLockCount < 2) {
     throw new Error(
-      "The committed Android Gradle lock set is incomplete: expected at least three project lockfiles and two buildscript lockfiles.",
+      "The Android Gradle lock set is incomplete: expected at least three project lockfiles and two buildscript lockfiles.",
     );
   }
-  if (!committedGradleLockFiles.includes("gradle/verification-metadata.xml")) {
-    throw new Error("The committed Android Gradle dependency verification metadata is missing.");
+  if (!gradleLockFiles.includes("gradle/verification-metadata.xml")) {
+    throw new Error("The Android Gradle dependency verification metadata is missing.");
   }
+  console.log(
+    (hasCommittedGradleLocks ? "Committed" : "CI-bootstrap") +
+    " Android Gradle lock set found; strict dependency locking will be enabled."
+  );
 }
 
-if (bootstrapGradleLocks || hasCommittedGradleLocks) {
-  await enableGeneratedGradleDependencyLocking(hasCommittedGradleLocks && !bootstrapGradleLocks);
+if (bootstrapGradleLocks || hasGradleLocks) {
+  await enableGeneratedGradleDependencyLocking(hasGradleLocks && !bootstrapGradleLocks);
 }
-if (hasCommittedGradleLocks) {
-  for (const relativePath of committedGradleLockFiles) {
-    const source = resolve(committedGradleLockDirectory, relativePath);
+if (hasGradleLocks) {
+  if (!gradleLockSourceDirectory) {
+    throw new Error("Android Gradle lock files were found without a source directory.");
+  }
+  for (const relativePath of gradleLockFiles) {
+    const source = resolve(gradleLockSourceDirectory, relativePath);
     if (relativePath === tauriAndroidLockRelativePath) {
       if (!tauriAndroidProjectDir) {
-        throw new Error("Could not locate the Tauri Android Gradle project for its committed lockfile.");
+        throw new Error("Could not locate the Tauri Android Gradle project for its lockfile.");
       }
       await copyFile(source, resolve(tauriAndroidProjectDir, "gradle.lockfile"));
     } else {
