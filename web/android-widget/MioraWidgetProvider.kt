@@ -392,8 +392,13 @@ open class MioraWidgetProvider : AppWidgetProvider() {
 
     private fun key(name: String, widgetId: Int) = name + "_" + widgetId
 
+    // SQLite does not promise row order for symptom queries. Canonicalize the
+    // representation so equivalent saved records never invalidate an encrypted
+    // widget draft merely because the query returned symptoms in a new order.
     private fun encodeSymptoms(symptoms: Map<String, Int>): String =
-        symptoms.entries.joinToString(",") { entry -> entry.key + ":" + entry.value }
+        symptoms.toSortedMap().entries.joinToString(",") { entry ->
+            entry.key + ":" + entry.value
+        }
 
     private fun decodeSymptoms(value: String?): Map<String, Int>? {
         if (value == null) return null
