@@ -263,12 +263,17 @@ fn encrypted_backup_snapshot_round_trips_periods_and_checkins() {
     assert_eq!(checkins.len(), 1);
 
     let restored = Repository::open(&restored_path, &[0x5A; 32]).unwrap();
-    restored.restore_backup_snapshot(&periods, &checkins).unwrap();
+    restored
+        .restore_backup_snapshot(&periods, &checkins)
+        .unwrap();
     let (restored_periods, restored_checkins) = restored.export_backup_snapshot().unwrap();
     assert_eq!(restored_periods.len(), 1);
     assert_eq!(restored_periods[0].start_date, start);
     assert_eq!(restored_periods[0].end_date, Some(date(2026, 11, 5)));
-    assert_eq!(restored_periods[0].last_observation, Some(date(2026, 11, 9)));
+    assert_eq!(
+        restored_periods[0].last_observation,
+        Some(date(2026, 11, 9))
+    );
     assert!(restored_periods[0].end_confirmed);
     assert_eq!(restored_checkins.len(), 1);
     assert_eq!(restored_checkins[0].mood_score, 4);

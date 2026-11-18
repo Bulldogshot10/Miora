@@ -522,7 +522,8 @@ impl Repository {
     /// Export every user-authored record needed to recreate the local tracker.
     pub fn export_backup_snapshot(
         &self,
-    ) -> Result<(Vec<PeriodBackupRecord>, Vec<DailyCheckinBackupRecord>), Box<dyn std::error::Error>> {
+    ) -> Result<(Vec<PeriodBackupRecord>, Vec<DailyCheckinBackupRecord>), Box<dyn std::error::Error>>
+    {
         // Keep every exported table on one WAL snapshot while the widget can
         // write through its own SQLite connection.
         let transaction = self.database.connection().unchecked_transaction()?;
@@ -561,9 +562,8 @@ impl Repository {
         };
 
         let checkin_dates = {
-            let mut statement = transaction.prepare(
-                "SELECT checkin_date FROM daily_checkins ORDER BY checkin_date ASC",
-            )?;
+            let mut statement = transaction
+                .prepare("SELECT checkin_date FROM daily_checkins ORDER BY checkin_date ASC")?;
             let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
             let mut dates = Vec::new();
             for row in rows {
@@ -614,28 +614,31 @@ impl Repository {
             {
                 return Err("A backup bleeding observation precedes its period start.".into());
             }
-            if let (Some(end), Some(observation)) =
-                (record.end_date, record.last_observation)
-            {
+            if let (Some(end), Some(observation)) = (record.end_date, record.last_observation) {
                 if observation < end {
-                    return Err("A backup bleeding observation precedes its recorded end date.".into());
+                    return Err(
+                        "A backup bleeding observation precedes its recorded end date.".into(),
+                    );
                 }
             }
-            if record.flow_intensity.is_some_and(|value| !(1..=3).contains(&value)) {
+            if record
+                .flow_intensity
+                .is_some_and(|value| !(1..=3).contains(&value))
+            {
                 return Err("A backup period has an invalid flow intensity.".into());
             }
             if record.end_confirmed
                 && (record.end_date.is_none() || record.last_observation.is_none())
             {
-                return Err("A confirmed backup period is missing its end or observation date.".into());
+                return Err(
+                    "A confirmed backup period is missing its end or observation date.".into(),
+                );
             }
         }
 
         for pair in ordered_periods.windows(2) {
             let next_start = pair[1].start_date;
-            if pair[0]
-                .end_date
-                .is_some_and(|end| end >= next_start)
+            if pair[0].end_date.is_some_and(|end| end >= next_start)
                 || pair[0]
                     .last_observation
                     .is_some_and(|observation| observation >= next_start)
@@ -649,8 +652,7 @@ impl Repository {
             if !checkin_dates.insert(record.date) {
                 return Err("The backup contains duplicate daily check-in dates.".into());
             }
-            if !(1..=5).contains(&record.mood_score)
-                || !(1..=5).contains(&record.energy_score)
+            if !(1..=5).contains(&record.mood_score) || !(1..=5).contains(&record.energy_score)
             {
                 return Err("A backup check-in has an invalid mood or energy score.".into());
             }
@@ -695,7 +697,11 @@ impl Repository {
                 INSERT INTO daily_checkins (checkin_date, mood_score, energy_score)
                 VALUES (?1, ?2, ?3)
                 ",
-                params![record.date.to_string(), record.mood_score, record.energy_score],
+                params![
+                    record.date.to_string(),
+                    record.mood_score,
+                    record.energy_score
+                ],
             )?;
             let checkin_id = transaction.last_insert_rowid();
             for symptom in &record.symptoms {

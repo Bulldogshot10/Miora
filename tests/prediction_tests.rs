@@ -55,11 +55,7 @@ fn rolling_origin_evaluation_compares_survival_and_median_mad() {
     let intervals = [28_i64, 29, 30, 27, 31, 28, 30, 29, 27, 31];
     let mut starts = vec![date(2024, 1, 1)];
     for interval in intervals {
-        let next = starts
-            .last()
-            .unwrap()
-            .checked_add(interval.days())
-            .unwrap();
+        let next = starts.last().unwrap().checked_add(interval.days()).unwrap();
         starts.push(next);
     }
 
