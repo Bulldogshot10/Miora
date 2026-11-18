@@ -77,14 +77,15 @@ jobs:
 
       - name: Verify and prefetch committed lockfiles
         run: |
+          set -euo pipefail
           test -s Cargo.lock
           test -s web/package-lock.json
           test -s web/src-tauri/Cargo.lock
-          test -s web/android-gradle-locks/root/gradle.lockfile
-          test -s web/android-gradle-locks/root/buildscript-gradle.lockfile
-          test -s web/android-gradle-locks/app/gradle.lockfile
-          test -s web/android-gradle-locks/buildSrc/gradle.lockfile
           test -s web/android-gradle-locks/gradle/verification-metadata.xml
+          regular_lock_count="$(find web/android-gradle-locks -type f -name 'gradle.lockfile' | wc -l | tr -d ' ')"
+          buildscript_lock_count="$(find web/android-gradle-locks -type f -name 'buildscript-gradle.lockfile' | wc -l | tr -d ' ')"
+          test "$regular_lock_count" -ge 3
+          test "$buildscript_lock_count" -ge 2
           cargo fetch --locked
           cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
 
