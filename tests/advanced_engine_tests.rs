@@ -74,7 +74,6 @@ fn survival_forecast_conditions_on_the_current_censored_cycle() {
     assert!(censored.p90_days >= censored.median_days);
 }
 
-
 #[test]
 fn changepoint_run_length_posterior_is_normalized_and_regime_weights_are_monotone() {
     let observations = [28.0, 29.0, 27.0, 28.0, 29.0, 28.0, 44.0, 46.0, 45.0];
@@ -87,14 +86,18 @@ fn changepoint_run_length_posterior_is_normalized_and_regime_weights_are_monoton
         .sum();
 
     assert!((posterior_sum - 1.0).abs() < 1e-10);
-    assert!(result
-        .run_length_probabilities
-        .iter()
-        .all(|(_, probability)| probability.is_finite() && (0.0..=1.0).contains(probability)));
-    assert!(result
-        .regime_weights
-        .windows(2)
-        .all(|pair| pair[0] <= pair[1] + 1e-12));
+    assert!(
+        result
+            .run_length_probabilities
+            .iter()
+            .all(|(_, probability)| probability.is_finite() && (0.0..=1.0).contains(probability))
+    );
+    assert!(
+        result
+            .regime_weights
+            .windows(2)
+            .all(|pair| pair[0] <= pair[1] + 1e-12)
+    );
     assert!((result.regime_weights.last().copied().unwrap_or_default() - 1.0).abs() < 1e-12);
 }
 
