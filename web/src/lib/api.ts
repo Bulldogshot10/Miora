@@ -29,6 +29,25 @@ type LocalBleedingState = {
 const BLEEDING_PRIOR = [0.05, 0.25, 0.75, 1.5, 2.0, 1.8, 1.2, 0.6, 0.3, 0.1, 0.05, 0.02, 0.01, 0.01];
 const MIN_CYCLE_LENGTH = 21;
 const MAX_CYCLE_LENGTH = 45;
+const VALID_SYMPTOM_CODES = new Set([
+  "cramps",
+  "bloating",
+  "headache",
+  "fatigue",
+  "mood_changes",
+]);
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  if (year < 1 || year > 9999) return false;
+  const parsed = new Date(0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  parsed.setUTCHours(0, 0, 0, 0);
+  return parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day;
+}
 
 function runningInTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -59,7 +78,7 @@ function readStoredDates(): string[] {
     const raw = localStorage.getItem(PERIOD_STORAGE_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed)
-      ? [...new Set(parsed.filter((value): value is string => typeof value === "string"))].sort()
+      ? [...new Set(parsed.filter(isIsoDate))].sort()
       : [];
   } catch {
     return [];
@@ -74,9 +93,8 @@ function readPeriodEnds(): Record<string, string> {
     return Object.fromEntries(
       Object.entries(parsed).filter(
         ([start, end]) =>
-          /^\d{4}-\d{2}-\d{2}$/.test(start) &&
-          typeof end === "string" &&
-          /^\d{4}-\d{2}-\d{2}$/.test(end),
+          isIsoDate(start) &&
+          isIsoDate(end),
       ),
     );
   } catch {
@@ -91,10 +109,15 @@ function readBleedingStates(): Record<string, LocalBleedingState> {
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
     const entries = Object.entries(parsed).filter(
       ([start, value]) =>
-        /^\d{4}-\d{2}-\d{2}$/.test(start) &&
+        isIsoDate(start) &&
         typeof value === "object" &&
         value !== null &&
-        "confirmed" in value,
+        "confirmed" in value &&
+        typeof value.confirmed === "boolean" &&
+        "lastObservation" in value &&
+        (value.lastObservation === null || isIsoDate(value.lastObservation)) &&
+        "endDate" in value &&
+        (value.endDate === null || isIsoDate(value.endDate)),
     );
     return Object.fromEntries(entries) as Record<string, LocalBleedingState>;
   } catch {
@@ -105,12 +128,36 @@ function readBleedingStates(): Record<string, LocalBleedingState> {
 function isDailyCheckin(value: unknown): value is DailyCheckinInput {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Record<string, unknown>;
-  return (
-    typeof entry.date === "string" &&
-    typeof entry.moodScore === "number" &&
-    typeof entry.energyScore === "number" &&
-    Array.isArray(entry.symptoms)
-  );
+  if (
+    !isIsoDate(entry.date) ||
+    !Number.isInteger(entry.moodScore) ||
+    !Number.isInteger(entry.energyScore) ||
+    (entry.moodScore as number) < 1 ||
+    (entry.moodScore as number) > 5 ||
+    (entry.energyScore as number) < 1 ||
+    (entry.energyScore as number) > 5 ||
+    !Array.isArray(entry.symptoms)
+  ) {
+    return false;
+  }
+
+  const seen = new Set<string>();
+  return entry.symptoms.every((symptom: unknown) => {
+    if (typeof symptom !== "object" || symptom === null) return false;
+    const item = symptom as Record<string, unknown>;
+    if (
+      typeof item.code !== "string" ||
+      !VALID_SYMPTOM_CODES.has(item.code) ||
+      !Number.isInteger(item.severity) ||
+      (item.severity as number) < 1 ||
+      (item.severity as number) > 3 ||
+      seen.has(item.code)
+    ) {
+      return false;
+    }
+    seen.add(item.code);
+    return true;
+  });
 }
 
 function readStoredCheckins(): DailyCheckinInput[] {
@@ -442,6 +489,7 @@ export async function logPeriodStart(
   }
 
   const today = toLocalIso(new Date());
+  if (!isIsoDate(date)) throw new Error("Choose a valid period start date.");
   if (date > today) throw new Error("A period start date cannot be in the future.");
 
   const starts = readStoredDates();
@@ -452,6 +500,7 @@ export async function logPeriodStart(
   }
 
   if (endDate) {
+    if (!isIsoDate(endDate)) throw new Error("Choose a valid last bleeding date.");
     if (endDate < date) throw new Error("The last bleeding day must be on or after the first day.");
     if (endDate > today) throw new Error("The last bleeding day cannot be in the future.");
     const nextStart = starts.find((start) => start > date);
@@ -493,6 +542,10 @@ export async function reportBleedingStatus(
   }
 
   const today = toLocalIso(new Date());
+  if (!isIsoDate(periodStart) || !isIsoDate(date) ||
+      (lastBleedingDate !== null && !isIsoDate(lastBleedingDate))) {
+    throw new Error("Choose valid bleeding dates.");
+  }
   if (date !== today) throw new Error("Refresh the dashboard before answering the bleeding check.");
 
   const starts = readStoredDates();
@@ -542,6 +595,7 @@ export async function reportBleedingStatus(
 }
 
 export async function getDailyCheckin(date: string): Promise<DailyCheckinInput | null> {
+  if (!isIsoDate(date)) throw new Error("Choose a valid check-in date.");
   if (runningInTauri()) {
     return invoke<DailyCheckinInput | null>("get_daily_checkin", { date });
   }
@@ -551,6 +605,12 @@ export async function getDailyCheckin(date: string): Promise<DailyCheckinInput |
 export async function saveDailyCheckin(
   input: DailyCheckinInput,
 ): Promise<DashboardSnapshot> {
+  if (!isDailyCheckin(input)) {
+    throw new Error("Check-in date, mood, energy, or symptom values are invalid.");
+  }
+  if (input.date > toLocalIso(new Date())) {
+    throw new Error("A check-in date cannot be in the future.");
+  }
   if (runningInTauri()) {
     return invoke<DashboardSnapshot>("save_daily_checkin", { input });
   }

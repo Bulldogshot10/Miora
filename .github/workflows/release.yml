@@ -40,6 +40,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            web/package-lock.json
+            web/src-tauri/tauri.conf.json
+            web/src-tauri/Cargo.lock
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
@@ -68,11 +73,13 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Generate dependency lockfiles
+      - name: Verify and prefetch committed lockfiles
         run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix web
-          cargo generate-lockfile
-          cargo generate-lockfile --manifest-path web/src-tauri/Cargo.toml
+          test -s Cargo.lock
+          test -s web/package-lock.json
+          test -s web/src-tauri/Cargo.lock
+          cargo fetch --locked
+          cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -192,8 +199,29 @@ jobs:
           gradle_file.write_text(source)
           PY
 
-      - name: Build signed release APK
-        run: npm run tauri:android:release --prefix web
+      - name: Build signed release APK (retry Maven Central HTTP 429)
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          for attempt in 1 2 3; do
+            log_file="$RUNNER_TEMP/miora-release-build-$attempt.log"
+            set +e
+            npm run tauri:android:release --prefix web >"$log_file" 2>&1
+            status=$?
+            set -e
+            cat "$log_file"
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if ! grep -Eiq 'HTTP.*429|status code 429|Too Many Requests' "$log_file"; then
+              exit "$status"
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Maven Central continued returning HTTP 429 after three release build attempts."
+              exit "$status"
+            fi
+            sleep "$((attempt * 20))"
+          done
 
       - name: Verify release APK signatures
         env:

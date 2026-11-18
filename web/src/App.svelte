@@ -24,6 +24,7 @@
   let busy = false;
   let errorMessage = "";
   let statusMessage = "";
+  let hasUnsavedCheckin = false;
 
   onMount(() => {
     void refresh();
@@ -55,6 +56,12 @@
   }
 
   function navigate(tab: Tab) {
+    if (activeTab === "checkin" && tab !== "checkin" && hasUnsavedCheckin) {
+      if (!window.confirm("This check-in has unsaved changes. Discard them and leave?")) {
+        return;
+      }
+      hasUnsavedCheckin = false;
+    }
     activeTab = tab;
     statusMessage = "";
   }
@@ -71,7 +78,9 @@
     try {
       const alreadyLogged = snapshot.periodStarts.includes(date);
       snapshot = await logPeriodStart(date, endDate);
-      statusMessage = alreadyLogged ? "That date is already in your history." : "Period start saved.";
+      statusMessage = alreadyLogged
+        ? (endDate ? "Bleeding end saved." : "That date is already in your history.")
+        : "Period start saved.";
       activeTab = "home";
     } catch (error) {
       errorMessage = String(error);
@@ -171,7 +180,12 @@
       {:else if activeTab === "calendar"}
         <CalendarScreen {snapshot} onSave={handlePeriodSave} {busy} />
       {:else if activeTab === "checkin"}
-        <CheckinScreen onSave={handleCheckinSave} onLoad={handleCheckinLoad} {busy} />
+        <CheckinScreen
+          onSave={handleCheckinSave}
+          onLoad={handleCheckinLoad}
+          onDirtyChange={(dirty) => { hasUnsavedCheckin = dirty; }}
+          {busy}
+        />
       {:else}
         <InsightsScreen {snapshot} />
       {/if}

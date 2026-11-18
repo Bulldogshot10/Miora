@@ -15,51 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-lockfiles:
-    name: Resolve dependency lockfiles
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-
-      - name: Generate lockfiles
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix web
-          cargo generate-lockfile
-          cargo generate-lockfile --manifest-path web/src-tauri/Cargo.toml
-
-      - name: Upload resolved lockfiles
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: miora-dependency-lockfiles
-          path: |
-            Cargo.lock
-            web/package-lock.json
-            web/src-tauri/Cargo.lock
-          if-no-files-found: error
-          retention-days: 3
-
   quality:
     name: Rust and Web quality
-    needs: dependency-lockfiles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Download resolved dependency lockfiles
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: miora-dependency-lockfiles
-          path: .
-
 
       - name: Install Tauri Linux dependencies
         run: |
@@ -85,6 +46,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Verify committed lockfiles
+        run: |
+          test -s Cargo.lock
+          test -s web/package-lock.json
+          test -s web/src-tauri/Cargo.lock
+          cargo fetch --locked
+          cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
+
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
@@ -99,10 +68,10 @@ jobs:
           cargo fmt --manifest-path web/src-tauri/Cargo.toml --all -- --check
 
       - name: Test Rust core
-        run: cargo test --all-targets
+        run: CARGO_NET_OFFLINE=true cargo test --locked --all-targets
 
       - name: Lint Rust core
-        run: cargo clippy --all-targets -- -D warnings
+        run: CARGO_NET_OFFLINE=true cargo clippy --locked --all-targets -- -D warnings
 
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
@@ -122,24 +91,17 @@ jobs:
         run: npm run build --prefix web
 
       - name: Check Tauri host
-        run: cargo check --manifest-path web/src-tauri/Cargo.toml --all-targets
+        run: CARGO_NET_OFFLINE=true cargo check --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 
       - name: Test Tauri host integration
-        run: cargo test --manifest-path web/src-tauri/Cargo.toml --all-targets
+        run: CARGO_NET_OFFLINE=true cargo test --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 
   android:
     name: Build Android APK
-    needs: dependency-lockfiles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Download resolved dependency lockfiles
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: miora-dependency-lockfiles
-          path: .
-
 
       - name: Install Linux dependencies for host-side UniFFI bindgen
         run: |
@@ -165,6 +127,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            web/package-lock.json
+            web/src-tauri/tauri.conf.json
+            web/src-tauri/Cargo.lock
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
@@ -193,6 +160,11 @@ jobs:
         with:
           targets: aarch64-linux-android
 
+      - name: Verify and prefetch locked Rust dependencies
+        run: |
+          cargo fetch --locked
+          cargo fetch --locked --manifest-path web/src-tauri/Cargo.toml
+
       - name: Install Web dependencies
         run: npm ci --prefix web --no-audit --no-fund
 
@@ -202,8 +174,40 @@ jobs:
       - name: Generate application icons
         run: npm run tauri:icons --prefix web
 
-      - name: Build debug APK
-        run: npm run tauri:android:build --prefix web
+      - name: Build debug APK (retry Maven Central HTTP 429)
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          for attempt in 1 2 3; do
+            log_file="$RUNNER_TEMP/miora-android-build-$attempt.log"
+            set +e
+            npm run tauri:android:build --prefix web >"$log_file" 2>&1
+            status=$?
+            set -e
+            cat "$log_file"
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if ! grep -Eiq 'HTTP.*429|status code 429|Too Many Requests' "$log_file"; then
+              exit "$status"
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Maven Central continued returning HTTP 429 after three Android build attempts."
+              exit "$status"
+            fi
+            sleep "$((attempt * 20))"
+          done
+
+      - name: Verify debug APK exists
+        run: |
+          mapfile -d '' apks < <(find web/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print0)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "::error::Android build completed without producing an APK."
+            exit 1
+          fi
+          for apk in "\${apks[@]}"; do
+            "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.bulldogshot10.miora'"
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

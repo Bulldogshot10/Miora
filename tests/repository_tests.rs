@@ -420,3 +420,45 @@ fn migration_refuses_to_replace_plaintext_database_when_wal_checkpoint_is_busy()
         let _ = std::fs::remove_file(PathBuf::from(sidecar));
     }
 }
+
+#[test]
+fn database_rejects_newer_schema_without_downgrading_or_destroying_data() {
+    let path = temporary_database_path();
+    let key = [0xA5; 32];
+    {
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE future_data (value TEXT NOT NULL);
+                INSERT INTO future_data (value) VALUES ('keep-me');
+                PRAGMA user_version = 3;
+                ",
+            )
+            .unwrap();
+    }
+
+    assert!(Repository::open(&path, &key).is_err());
+
+    let connection = Connection::open(&path).unwrap();
+    let key_hex = "a5".repeat(32);
+    connection
+        .execute_batch(&format!(r#"PRAGMA key = "x'{key_hex}'";"#))
+        .unwrap();
+    let version: i32 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    let value: String = connection
+        .query_row("SELECT value FROM future_data", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 3);
+    assert_eq!(value, "keep-me");
+    drop(connection);
+
+    let _ = std::fs::remove_file(&path);
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = path.as_os_str().to_os_string();
+        sidecar.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(sidecar));
+    }
+}

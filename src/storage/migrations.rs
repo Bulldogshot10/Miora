@@ -28,7 +28,14 @@ CREATE TABLE symptoms (
 "#;
 
 pub fn migrate(connection: &Connection) -> Result<()> {
+    const LATEST_SCHEMA_VERSION: i32 = 2;
     let version: i32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+
+    if version > LATEST_SCHEMA_VERSION {
+        return Err(rusqlite::Error::InvalidParameterName(format!(
+            "Database schema version {version} is newer than the maximum supported version {LATEST_SCHEMA_VERSION}."
+        )));
+    }
 
     if version < 1 {
         let has_legacy_period_table: bool = connection.query_row(

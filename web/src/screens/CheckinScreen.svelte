@@ -7,6 +7,7 @@
 
   export let onSave: (input: DailyCheckinInput) => void | Promise<void>;
   export let onLoad: (date: string) => Promise<DailyCheckinInput | null>;
+  export let onDirtyChange: (dirty: boolean) => void = () => {};
   export let busy = false;
 
   let selectedDate = localDateIso();
@@ -56,8 +57,13 @@
     }
   }
 
+  function setDirty(dirty: boolean) {
+    hasUnsavedChanges = dirty;
+    onDirtyChange(dirty);
+  }
+
   async function loadSelectedDate() {
-    hasUnsavedChanges = false;
+    setDirty(false);
     loadError = false;
     const sequence = ++loadSequence;
     loadingDate = true;
@@ -90,7 +96,7 @@
       energyScore = 3;
       selectedSymptoms = {};
       hasExistingCheckin = false;
-      hasUnsavedChanges = false;
+      setDirty(false);
       loadError = true;
       dateMessage = error instanceof Error ? error.message : String(error);
     } finally {
@@ -99,8 +105,16 @@
   }
 
   function handleDateChange(event: Event) {
-    const value = (event.currentTarget as HTMLInputElement).value;
+    const input = event.currentTarget as HTMLInputElement;
+    const value = input.value;
     if (!value) return;
+    if (
+      hasUnsavedChanges &&
+      !window.confirm("This check-in has unsaved changes. Discard them and switch dates?")
+    ) {
+      input.value = selectedDate;
+      return;
+    }
     selectedDate = value;
     void loadSelectedDate();
   }
@@ -120,13 +134,13 @@
       next[code] = 1;
     }
     selectedSymptoms = next;
-    hasUnsavedChanges = true;
+    setDirty(true);
     clearFeedback();
   }
 
   function setSeverity(code: string, severity: number) {
     selectedSymptoms = { ...selectedSymptoms, [code]: severity };
-    hasUnsavedChanges = true;
+    setDirty(true);
     clearFeedback();
   }
 
@@ -216,7 +230,7 @@
           disabled={loadingDate || busy || loadError}
           onclick={() => {
             moodScore = mood.score;
-            hasUnsavedChanges = true;
+            setDirty(true);
             clearFeedback();
           }}
         >
