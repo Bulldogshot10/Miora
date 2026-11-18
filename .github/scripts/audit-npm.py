@@ -87,7 +87,17 @@ def main() -> int:
         print("npm audit did not return valid JSON.", file=sys.stderr)
         return result.returncode or 1
 
+    if report.get("error"):
+        print("npm audit returned an error response:", file=sys.stderr)
+        print(json.dumps(report["error"], indent=2), file=sys.stderr)
+        return result.returncode or 1
+
     vulnerabilities = report.get("vulnerabilities", {})
+    if result.returncode == 1 and not vulnerabilities:
+        sys.stderr.write(result.stderr)
+        print("npm audit exited unsuccessfully without a vulnerability report.", file=sys.stderr)
+        return 1
+
     accepted = []
     rejected = []
 
