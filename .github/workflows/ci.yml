@@ -254,7 +254,7 @@ jobs:
           cp "$RUNNER_TEMP/miora-arm64-debug.apk" "$arm64_apk"
 
       - name: Run Android Keystore, database, and widget smoke tests on emulator
-        timeout-minutes: 12
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           sdkmanager --install \
@@ -267,21 +267,30 @@ jobs:
             --name miora-ci-api36 \
             --package "system-images;android-36;google_apis;x86_64"
 
+          # GitHub-hosted Ubuntu runners expose KVM but may leave its
+          # device node owned by the kvm group, which the runner is not in.
+          if [ -e /dev/kvm ]; then
+            sudo chown "$USER" /dev/kvm
+          fi
           if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             acceleration=on
+            ls -l /dev/kvm
           else
-            acceleration=off
+            echo "::error::KVM is unavailable to the runner; cannot execute the x86_64 runtime test."
+            ls -l /dev/kvm || true
+            id
+            exit 1
           fi
           adb start-server
           "$ANDROID_HOME/emulator/emulator" \
             -avd miora-ci-api36 \
             -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
-            -no-snapshot-save -gpu swiftshader_indirect -accel "$acceleration" \
+            -no-snapshot-save -gpu swiftshader_indirect -accel on \
             >"$RUNNER_TEMP/miora-emulator.log" 2>&1 &
           emulator_pid=$!
 
           serial=""
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 150); do
             if ! kill -0 "$emulator_pid" 2>/dev/null; then
               cat "$RUNNER_TEMP/miora-emulator.log"
               echo "::error::Android emulator exited before registering with adb."
@@ -294,7 +303,7 @@ jobs:
           if [ -z "$serial" ]; then
             cat "$RUNNER_TEMP/miora-emulator.log"
             adb devices -l || true
-            echo "::error::Android emulator did not register with adb within 120 seconds."
+            echo "::error::Android emulator did not register with adb within 300 seconds."
             exit 1
           fi
 
