@@ -652,8 +652,7 @@ impl Repository {
             if !checkin_dates.insert(record.date) {
                 return Err("The backup contains duplicate daily check-in dates.".into());
             }
-            if !(1..=5).contains(&record.mood_score) || !(1..=5).contains(&record.energy_score)
-            {
+            if !(1..=5).contains(&record.mood_score) || !(1..=5).contains(&record.energy_score) {
                 return Err("A backup check-in has an invalid mood or energy score.".into());
             }
             if record.symptoms.len() > 5 {
