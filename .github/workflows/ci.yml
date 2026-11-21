@@ -355,8 +355,8 @@ jobs:
           adb -s "$serial" shell am force-stop "$package"
           adb -s "$serial" logcat -c
           adb -s "$serial" shell am broadcast \
-            -a android.appwidget.action.APPWIDGET_UPDATE \
-            -n "$package/$package.MioraWidgetProvider" \
+            -a "$package.CI_WIDGET_UPDATE" \
+            -n "$package/$package.MioraWidgetSmokeTestReceiver" \
             --eia appWidgetIds 1
           sleep 5
           widget_read="$(adb -s "$serial" logcat -d -s MioraWidget:D | grep -F "encrypted_database_read_ok" || true)"

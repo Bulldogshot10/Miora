@@ -670,6 +670,9 @@ fn restore_backup(
             return Err("The backup contains a check-in date in the future.".to_string());
         }
 
+        if record.symptoms.len() > 5 {
+            return Err("A backup check-in contains too many symptoms.".to_string());
+        }
         let mut symptoms = Vec::with_capacity(record.symptoms.len());
         for item in record.symptoms {
             let code = SymptomCode::parse_key(&item.code)

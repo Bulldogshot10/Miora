@@ -20,6 +20,8 @@ if (!packageName || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(pa
 let manifest = await readFile(manifestPath, "utf8");
 const receiverName = packageName + ".MioraWidgetProvider";
 const actionReceiverName = packageName + ".MioraWidgetActionReceiver";
+const smokeReceiverName = packageName + ".MioraWidgetSmokeTestReceiver";
+const smokeReceiverAction = packageName + ".CI_WIDGET_UPDATE";
 
 // Cycle and symptom records are sensitive. Disable Android cloud backup and
 // device-to-device transfer at the manifest and resource-rule levels.
@@ -93,6 +95,28 @@ if (!manifest.includes('android:name="' + actionReceiverName + '"')) {
   receiverDeclarations.push(
     '        <receiver android:name="' + actionReceiverName + '" android:exported="false" />',
   );
+}
+if (releaseBuild) {
+  const smokeReceiverStart = manifest.indexOf(
+    '<receiver android:name="' + smokeReceiverName + '"',
+  );
+  if (smokeReceiverStart >= 0) {
+    const smokeReceiverEnd = manifest.indexOf("</receiver>", smokeReceiverStart);
+    if (smokeReceiverEnd < 0) {
+      throw new Error("Unclosed debug widget smoke-test receiver declaration.");
+    }
+    manifest =
+      manifest.slice(0, smokeReceiverStart) +
+      manifest.slice(smokeReceiverEnd + "</receiver>".length);
+  }
+} else if (!manifest.includes('android:name="' + smokeReceiverName + '"')) {
+  receiverDeclarations.push([
+    '        <receiver android:name="' + smokeReceiverName + '" android:exported="true" android:label="Miora CI widget smoke test">',
+    '            <intent-filter>',
+    '                <action android:name="' + smokeReceiverAction + '" />',
+    '            </intent-filter>',
+    '        </receiver>',
+  ].join("\n"));
 }
 if (receiverDeclarations.length > 0) {
   if (!manifest.includes("</application>")) {
@@ -277,6 +301,19 @@ await writeFile(
   resolve(javaDir, "MioraDatabaseKeyStore.kt"),
   keyStoreSource.replace("package __PACKAGE__", "package " + packageName),
 );
+const smokeReceiverPath = resolve(javaDir, "MioraWidgetSmokeTestReceiver.kt");
+if (releaseBuild) {
+  await rm(smokeReceiverPath, { force: true });
+} else {
+  const smokeReceiverSource = await readFile(
+    resolve(sourceDir, "MioraWidgetSmokeTestReceiver.kt"),
+    "utf8",
+  );
+  await writeFile(
+    smokeReceiverPath,
+    smokeReceiverSource.replaceAll("__PACKAGE__", packageName),
+  );
+}
 await copyFile(
   resolve(sourceDir, "miora_daily_checkin_widget.xml"),
   resolve(layoutDir, "miora_daily_checkin_widget.xml"),

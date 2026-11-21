@@ -47,6 +47,16 @@ function base64ToBytes(value: string): Uint8Array {
   return output;
 }
 
+function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function wipeArrayBuffer(buffer: ArrayBuffer): void {
+  new Uint8Array(buffer).fill(0);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -128,10 +138,12 @@ function assertBackupDocument(value: unknown): asserts value is BackupDocument {
 
 async function deriveEncryptionKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   const passwordBytes = new TextEncoder().encode(passphrase);
+  const passwordBuffer = copyToArrayBuffer(passwordBytes);
+  const saltBuffer = copyToArrayBuffer(salt);
   try {
     const material = await crypto.subtle.importKey(
       "raw",
-      passwordBytes,
+      passwordBuffer,
       "PBKDF2",
       false,
       ["deriveKey"],
@@ -139,7 +151,7 @@ async function deriveEncryptionKey(passphrase: string, salt: Uint8Array): Promis
     return await crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
-        salt,
+        salt: saltBuffer,
         iterations: KDF_ITERATIONS,
         hash: "SHA-256",
       },
@@ -150,6 +162,8 @@ async function deriveEncryptionKey(passphrase: string, salt: Uint8Array): Promis
     );
   } finally {
     passwordBytes.fill(0);
+    wipeArrayBuffer(passwordBuffer);
+    wipeArrayBuffer(saltBuffer);
   }
 }
 
@@ -171,14 +185,17 @@ export async function encryptBackup(
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveEncryptionKey(passphrase, salt);
   const plaintext = new TextEncoder().encode(JSON.stringify(document));
+  const ivBuffer = copyToArrayBuffer(iv);
+  const aadBuffer = copyToArrayBuffer(BACKUP_AAD);
+  const plaintextBuffer = copyToArrayBuffer(plaintext);
 
   try {
+    const key = await deriveEncryptionKey(passphrase, salt);
     const ciphertext = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv, additionalData: BACKUP_AAD, tagLength: 128 },
+      { name: "AES-GCM", iv: ivBuffer, additionalData: aadBuffer, tagLength: 128 },
       key,
-      plaintext,
+      plaintextBuffer,
     );
 
     const envelope: EncryptedBackupEnvelope = {
@@ -200,6 +217,9 @@ export async function encryptBackup(
     plaintext.fill(0);
     salt.fill(0);
     iv.fill(0);
+    wipeArrayBuffer(ivBuffer);
+    wipeArrayBuffer(aadBuffer);
+    wipeArrayBuffer(plaintextBuffer);
   }
 }
 
@@ -251,14 +271,17 @@ export async function decryptBackup(
     throw new Error("The encrypted backup is incomplete or corrupted.");
   }
 
-  const key = await deriveEncryptionKey(passphrase, salt);
+  const ivBuffer = copyToArrayBuffer(iv);
+  const aadBuffer = copyToArrayBuffer(BACKUP_AAD);
+  const ciphertextBuffer = copyToArrayBuffer(ciphertext);
   try {
+    const key = await deriveEncryptionKey(passphrase, salt);
     let plaintext: ArrayBuffer;
     try {
       plaintext = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv, additionalData: BACKUP_AAD, tagLength: 128 },
+        { name: "AES-GCM", iv: ivBuffer, additionalData: aadBuffer, tagLength: 128 },
         key,
-        ciphertext,
+        ciphertextBuffer,
       );
     } catch {
       throw new Error("The passphrase is incorrect or the backup has been modified.");
@@ -281,5 +304,8 @@ export async function decryptBackup(
     salt.fill(0);
     iv.fill(0);
     ciphertext.fill(0);
+    wipeArrayBuffer(ivBuffer);
+    wipeArrayBuffer(aadBuffer);
+    wipeArrayBuffer(ciphertextBuffer);
   }
 }
