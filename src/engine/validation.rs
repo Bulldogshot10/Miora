@@ -121,20 +121,18 @@ pub fn evaluate_rolling_origin_with(
         // Only dates available at this historical origin enter either model.
         let history = &ordered[..=current_index];
 
-        if let Some(prediction) = estimate_next_period_at(history, forecast_date) {
-            if let Some(sample) =
+        if let Some(prediction) = estimate_next_period_at(history, forecast_date)
+            && let Some(sample) =
                 ForecastSample::from_prediction(prediction, cycle_start, actual_start)
-            {
-                survival_samples.push(sample);
-            }
+        {
+            survival_samples.push(sample);
         }
 
-        if let Some(prediction) = estimate_next_period_baseline(history) {
-            if let Some(sample) =
+        if let Some(prediction) = estimate_next_period_baseline(history)
+            && let Some(sample) =
                 ForecastSample::from_prediction(prediction, cycle_start, actual_start)
-            {
-                baseline_samples.push(sample);
-            }
+        {
+            baseline_samples.push(sample);
         }
     }
 

@@ -152,10 +152,10 @@ impl Repository {
         start: NaiveDate,
         end: Option<NaiveDate>,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        if let Some(end) = end {
-            if end < start {
-                return Err("The last bleeding day must be on or after the first day.".into());
-            }
+        if let Some(end) = end
+            && end < start
+        {
+            return Err("The last bleeding day must be on or after the first day.".into());
         }
 
         let transaction = self.database.connection().unchecked_transaction()?;
@@ -614,12 +614,12 @@ impl Repository {
             {
                 return Err("A backup bleeding observation precedes its period start.".into());
             }
-            if let (Some(end), Some(observation)) = (record.end_date, record.last_observation) {
-                if observation < end {
-                    return Err(
-                        "A backup bleeding observation precedes its recorded end date.".into(),
-                    );
-                }
+            if let (Some(end), Some(observation)) = (record.end_date, record.last_observation)
+                && observation < end
+            {
+                return Err(
+                    "A backup bleeding observation precedes its recorded end date.".into(),
+                );
             }
             if record
                 .flow_intensity
