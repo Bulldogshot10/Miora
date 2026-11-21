@@ -11,6 +11,7 @@ use crate::domain::prediction::CyclePrediction;
 use crate::engine::cycle_estimator::{estimate_next_period_at, estimate_next_period_baseline};
 
 const SURVIVAL_INTERVAL_LEVEL: f64 = 0.80;
+// Idealized Gaussian one-sigma reference; integer-day rounding can change actual coverage.
 const BASELINE_INTERVAL_LEVEL: f64 = 0.682_689_492;
 const PINBALL_QUANTILES: [f64; 3] = [0.10, 0.50, 0.90];
 
@@ -19,7 +20,8 @@ pub struct ForecastMetrics {
     pub predictions: usize,
     /// Empirical fraction of actual starts inside the reported interval.
     pub interval_coverage: f64,
-    /// Nominal level associated with the interval construction.
+    /// Nominal level associated with the interval construction. For the MAD
+    /// baseline this is an idealized Gaussian reference before day rounding.
     pub nominal_interval_level: f64,
     pub mean_interval_width_days: f64,
     pub mean_absolute_median_error_days: f64,

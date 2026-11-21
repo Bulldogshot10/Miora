@@ -321,7 +321,7 @@ jobs:
               echo "::error::Android emulator exited during boot."
               exit 1
             fi
-            booted="$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')"
+            booted="$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$booted" = "1" ]; then break; fi
             sleep 3
           done
@@ -339,12 +339,13 @@ jobs:
           adb -s "$serial" shell monkey -p "$package" 1
           launched=""
           for attempt in $(seq 1 30); do
-            launched="$(adb -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\\r')"
+            launched="$(adb -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\r' || true)"
             if [ -n "$launched" ]; then break; fi
             sleep 2
           done
           if [ -z "$launched" ]; then
             adb -s "$serial" logcat -d -t 4000
+            adb -s "$serial" shell dumpsys activity activities || true
             echo "::error::Miora did not stay running after first launch."
             exit 1
           fi
@@ -375,7 +376,7 @@ jobs:
           adb -s "$serial" shell monkey -p "$package" 1
           relaunched=""
           for attempt in $(seq 1 30); do
-            relaunched="$(adb -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\\r')"
+            relaunched="$(adb -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\r' || true)"
             if [ -n "$relaunched" ]; then break; fi
             sleep 2
           done

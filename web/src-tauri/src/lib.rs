@@ -629,14 +629,17 @@ fn restore_backup(
     let today = Zoned::now().date();
     let mut periods = Vec::with_capacity(backup.periods.len());
     for record in backup.periods {
-        let start_date = record.start_date
+        let start_date = record
+            .start_date
             .parse::<NaiveDate>()
             .map_err(|_| "A backup period has an invalid start date.".to_string())?;
-        let end_date = record.end_date
+        let end_date = record
+            .end_date
             .map(|value| value.parse::<NaiveDate>())
             .transpose()
             .map_err(|_| "A backup period has an invalid end date.".to_string())?;
-        let last_observation = record.last_observation
+        let last_observation = record
+            .last_observation
             .map(|value| value.parse::<NaiveDate>())
             .transpose()
             .map_err(|_| "A backup period has an invalid bleeding observation date.".to_string())?;
@@ -659,7 +662,8 @@ fn restore_backup(
 
     let mut checkins = Vec::with_capacity(backup.checkins.len());
     for record in backup.checkins {
-        let date = record.date
+        let date = record
+            .date
             .parse::<NaiveDate>()
             .map_err(|_| "A backup check-in has an invalid date.".to_string())?;
         if date > today {
@@ -683,9 +687,12 @@ fn restore_backup(
         });
     }
 
-    let repository = backend.repository.lock()
+    let repository = backend
+        .repository
+        .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
-    repository.restore_backup_snapshot(&periods, &checkins)
+    repository
+        .restore_backup_snapshot(&periods, &checkins)
         .map_err(|error| error.to_string())?;
     dashboard_snapshot(&repository)
 }
