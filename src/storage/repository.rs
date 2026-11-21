@@ -617,9 +617,7 @@ impl Repository {
             if let (Some(end), Some(observation)) = (record.end_date, record.last_observation)
                 && observation < end
             {
-                return Err(
-                    "A backup bleeding observation precedes its recorded end date.".into(),
-                );
+                return Err("A backup bleeding observation precedes its recorded end date.".into());
             }
             if record
                 .flow_intensity
