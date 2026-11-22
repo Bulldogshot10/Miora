@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """Record AGP 9.3.1's internal, dependency-free androidApis lock state.
 
 AGP consumes this internal lock identity while serializing
