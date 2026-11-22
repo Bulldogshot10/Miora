@@ -89,10 +89,15 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun handleAction(context: Context, widgetId: Int, intent: Intent) {
+    private fun handleAction(
+        context: Context,
+        widgetId: Int,
+        intent: Intent,
+        requireInstalledWidget: Boolean = true,
+    ) {
         val installedIds = AppWidgetManager.getInstance(context)
             .getAppWidgetIds(ComponentName(context, MioraWidgetProvider::class.java))
-        if (widgetId !in installedIds) return
+        if (requireInstalledWidget && widgetId !in installedIds) return
 
         // A launcher can retain an old PendingIntent across midnight. Never let a
         // click rendered for yesterday mutate today's check-in.
@@ -148,6 +153,70 @@ open class MioraWidgetProvider : AppWidgetProvider() {
 
         prefs.edit().remove(key("status", widgetId)).apply()
         updateAllWidgets(context)
+    }
+
+    /**
+     * Debug-only runtime coverage for the actual widget action handler and
+     * encrypted database. The test bridge calls this from the app's UID.
+     */
+    internal fun runSmokeRoundTrip(context: Context, widgetId: Int) {
+        check((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            "Widget smoke tests are available only in debug builds."
+        }
+
+        val appContext = context.applicationContext
+        val today = todayIso()
+        val yesterday = java.time.LocalDate.parse(today).minusDays(1).toString()
+
+        val stalePendingIntent = clickIntent(
+            appContext, widgetId, ACTION_SAVE, "today", yesterday,
+        )
+        val currentPendingIntent = clickIntent(
+            appContext, widgetId, ACTION_SAVE, "today", today,
+        )
+        check(stalePendingIntent != currentPendingIntent) {
+            "Widget PendingIntent identity must include its calendar date."
+        }
+        stalePendingIntent.cancel()
+        currentPendingIntent.cancel()
+        logWidgetDatabaseAccess(appContext, "pending_intent_date_identity_ok")
+
+        fun dispatch(actionName: String, value: String, date: String = today) {
+            val actionIntent = Intent().apply {
+                action = actionName
+                putExtra(EXTRA_VALUE, value)
+                putExtra(EXTRA_DATE, date)
+            }
+            handleAction(
+                appContext,
+                widgetId,
+                actionIntent,
+                requireInstalledWidget = false,
+            )
+        }
+
+        dispatch(ACTION_SET_MOOD, "5")
+        dispatch(ACTION_SET_ENERGY, "4")
+        dispatch(ACTION_CYCLE_SYMPTOM, "cramps")
+        dispatch(ACTION_SAVE, "today")
+
+        val database = databaseFile(appContext)
+        val saved = widgetGetDailyCheckin(database.absolutePath, today)
+            ?: error("The widget action did not persist today's check-in.")
+        check(saved.moodScore == 5 && saved.energyScore == 4) {
+            "The widget action round-trip returned incorrect mood or energy values."
+        }
+        check(saved.symptoms.any { it.code == "cramps" && it.severity == 1 }) {
+            "The widget action round-trip did not persist the selected symptom."
+        }
+
+        dispatch(ACTION_SET_MOOD, "1", yesterday)
+        val afterStaleAction = widgetGetDailyCheckin(database.absolutePath, today)
+            ?: error("The saved check-in disappeared after a stale widget action.")
+        check(afterStaleAction.moodScore == 5 && afterStaleAction.energyScore == 4) {
+            "A stale widget action changed today's saved check-in."
+        }
+        logWidgetDatabaseAccess(appContext, "widget_action_round_trip_ok")
     }
 
     private fun updateAllWidgets(context: Context) {
@@ -495,13 +564,14 @@ open class MioraWidgetProvider : AppWidgetProvider() {
         widgetId: Int,
         actionName: String,
         value: String,
+        date: String = todayIso(),
     ): PendingIntent {
         val click = Intent(context, MioraWidgetActionReceiver::class.java).apply {
             action = actionName
-            data = Uri.parse("miora-widget://" + widgetId + "/" + actionName + "/" + value)
+            data = Uri.parse("miora-widget://" + widgetId + "/" + actionName + "/" + value + "/" + date)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(EXTRA_VALUE, value)
-            putExtra(EXTRA_DATE, todayIso())
+            putExtra(EXTRA_DATE, date)
         }
         val requestCode = (widgetId.toString() + actionName + value).hashCode()
         return PendingIntent.getBroadcast(
