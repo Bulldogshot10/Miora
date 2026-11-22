@@ -13,6 +13,6 @@ This register records active advisories still present in the committed lockfiles
 
 GitHub advisory GHSA-fc5q-39xc-vjpf for `picomatch` was withdrawn on 2026-11-18 and is no longer an active finding. It is not allowlisted by `.github/scripts/audit-npm.py`; that script checks every active high or critical npm finding and has no package-specific exception.
 
-The Rust lockfiles were also checked against ZIP advisories RUSTSEC-2026-0546 and RUSTSEC-2026-0548 and the `libz-sys` advisory RUSTSEC-2026-0544: neither `zip` nor `libz-sys` is present in either `Cargo.lock` or `web/src-tauri/Cargo.lock` at the review date.
+The `url` 2.5.8 dependency affected by RUSTSEC-2026-0592 was upgraded to 2.5.9 in `web/src-tauri/Cargo.lock`; the advisory's fixed version begins at 2.5.9. Re-check with `cargo audit` whenever Tauri's dependency graph or either Rust lockfile changes. The Rust lockfiles were also checked against ZIP advisories RUSTSEC-2026-0546 and RUSTSEC-2026-0548 and the `libz-sys` advisory RUSTSEC-2026-0544: neither `zip` nor `libz-sys` is present in either `Cargo.lock` or `web/src-tauri/Cargo.lock` at the review date.
 
 A clean audit result means there are no unapproved findings in the scoped dependency set. It does not mean the upstream advisories in this register have disappeared. Remove entries only after the lockfile no longer contains the affected dependency or a patched release is verified.
