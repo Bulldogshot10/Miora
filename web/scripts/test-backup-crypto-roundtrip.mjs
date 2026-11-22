@@ -19,8 +19,11 @@ const transpiled = ts.transpileModule(source, {
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(transpiled).toString("base64")}`;
 const { encryptBackup, decryptBackup } = await import(moduleUrl);
 
-const input = await readFile(0, "utf8");
-const document = JSON.parse(input);
+const inputChunks = [];
+for await (const chunk of process.stdin) {
+  inputChunks.push(Buffer.from(chunk));
+}
+const document = JSON.parse(Buffer.concat(inputChunks).toString("utf8"));
 const passphrase = "miora-ci-end-to-end-backup-roundtrip-2026";
 const encrypted = await encryptBackup(document, passphrase);
 const restored = await decryptBackup(encrypted, passphrase);
