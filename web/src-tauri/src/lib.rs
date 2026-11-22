@@ -423,6 +423,7 @@ fn symptom_patterns_for_cycle_day(
 
     Ok(patterns)
 }
+
 fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, String> {
     let starts = repository
         .period_start_dates()
@@ -724,6 +725,7 @@ fn restore_backup(
     restore_backup_document(&repository, backup, Zoned::now().date())?;
     dashboard_snapshot(&repository)
 }
+
 #[tauri::command]
 fn get_daily_checkin(
     date: String,
