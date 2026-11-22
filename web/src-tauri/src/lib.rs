@@ -363,6 +363,10 @@ fn symptom_patterns_for_cycle_day(
     starts: &[NaiveDate],
     target_cycle_day: u32,
 ) -> Result<Vec<SymptomPatternSnapshot>, String> {
+    if starts.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let checkins = repository
         .daily_checkins_with_symptoms()
         .map_err(|error| error.to_string())?;
@@ -374,20 +378,31 @@ fn symptom_patterns_for_cycle_day(
         SymptomCode::MoodChanges,
     ];
 
-    let mut patterns = Vec::new();
-    for code in codes {
-        let observations: Vec<SymptomObservation> = checkins
-            .iter()
-            .filter_map(|(date, symptoms)| {
-                let start = starts.iter().rev().find(|start| **start <= *date)?;
-                let cycle_day = (*date - *start).get_days() as u32 + 1;
-                Some(SymptomObservation {
-                    cycle_day,
-                    occurred: symptoms.contains(&code),
-                })
-            })
-            .collect();
+    // Both inputs are ordered by date. Advance one cursor through period starts
+    // instead of rescanning the complete history for every check-in.
+    let mut start_index = 0;
+    let mut observations_by_code: Vec<Vec<SymptomObservation>> =
+        (0..codes.len()).map(|_| Vec::with_capacity(checkins.len())).collect();
 
+    for (date, symptoms) in &checkins {
+        while start_index + 1 < starts.len() && starts[start_index + 1] <= *date {
+            start_index += 1;
+        }
+        if starts[start_index] > *date {
+            continue;
+        }
+
+        let cycle_day = (*date - starts[start_index]).get_days() as u32 + 1;
+        for (index, code) in codes.iter().enumerate() {
+            observations_by_code[index].push(SymptomObservation {
+                cycle_day,
+                occurred: symptoms.contains(code),
+            });
+        }
+    }
+
+    let mut patterns = Vec::new();
+    for (code, observations) in codes.into_iter().zip(observations_by_code) {
         let matching_count = observations
             .iter()
             .filter(|entry| entry.cycle_day == target_cycle_day)
@@ -408,7 +423,6 @@ fn symptom_patterns_for_cycle_day(
 
     Ok(patterns)
 }
-
 fn dashboard_snapshot(repository: &Repository) -> Result<DashboardSnapshot, String> {
     let starts = repository
         .period_start_dates()
@@ -572,12 +586,7 @@ fn report_bleeding_status(
     dashboard_snapshot(&repository)
 }
 
-#[tauri::command]
-fn export_backup(backend: State<'_, BackendState>) -> Result<BackupDocument, String> {
-    let repository = backend
-        .repository
-        .lock()
-        .map_err(|_| "Database lock is unavailable.".to_string())?;
+fn export_backup_document(repository: &Repository) -> Result<BackupDocument, String> {
     let (periods, checkins) = repository
         .export_backup_snapshot()
         .map_err(|error| error.to_string())?;
@@ -614,11 +623,11 @@ fn export_backup(backend: State<'_, BackendState>) -> Result<BackupDocument, Str
     })
 }
 
-#[tauri::command]
-fn restore_backup(
+fn restore_backup_document(
+    repository: &Repository,
     backup: BackupDocument,
-    backend: State<'_, BackendState>,
-) -> Result<DashboardSnapshot, String> {
+    today: NaiveDate,
+) -> Result<(), String> {
     if backup.format != "miora-backup-data" || backup.version != 1 {
         return Err("This backup format or version is not supported.".to_string());
     }
@@ -626,7 +635,6 @@ fn restore_backup(
         return Err("The backup contains more records than Miora supports.".to_string());
     }
 
-    let today = Zoned::now().date();
     let mut periods = Vec::with_capacity(backup.periods.len());
     for record in backup.periods {
         let start_date = record
@@ -690,16 +698,32 @@ fn restore_backup(
         });
     }
 
+    repository
+        .restore_backup_snapshot(&periods, &checkins)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn export_backup(backend: State<'_, BackendState>) -> Result<BackupDocument, String> {
     let repository = backend
         .repository
         .lock()
         .map_err(|_| "Database lock is unavailable.".to_string())?;
-    repository
-        .restore_backup_snapshot(&periods, &checkins)
-        .map_err(|error| error.to_string())?;
-    dashboard_snapshot(&repository)
+    export_backup_document(&repository)
 }
 
+#[tauri::command]
+fn restore_backup(
+    backup: BackupDocument,
+    backend: State<'_, BackendState>,
+) -> Result<DashboardSnapshot, String> {
+    let repository = backend
+        .repository
+        .lock()
+        .map_err(|_| "Database lock is unavailable.".to_string())?;
+    restore_backup_document(&repository, backup, Zoned::now().date())?;
+    dashboard_snapshot(&repository)
+}
 #[tauri::command]
 fn get_daily_checkin(
     date: String,
@@ -807,6 +831,106 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_backup_round_trips_database_through_webcrypto_and_restore() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let source_path = std::env::temp_dir().join(format!("miora-backup-source-{nonce}.sqlite3"));
+        let restored_path =
+            std::env::temp_dir().join(format!("miora-backup-restored-{nonce}.sqlite3"));
+
+        let source = Repository::open(&source_path, &[0xA5; 32]).unwrap();
+        let starts = [
+            date(2026, 8, 1),
+            date(2026, 8, 29),
+            date(2026, 9, 26),
+            date(2026, 10, 24),
+        ];
+        for (index, start) in starts.iter().copied().enumerate() {
+            let end = (index == 0).then_some(date(2026, 8, 5));
+            source.add_period_start_with_end(start, end).unwrap();
+        }
+        source
+            .report_bleeding_status(
+                starts[3],
+                date(2026, 10, 28),
+                false,
+                Some(date(2026, 10, 27)),
+            )
+            .unwrap();
+
+        let first_symptoms = [
+            SymptomEntry {
+                code: SymptomCode::Cramps,
+                severity: Severity::Moderate,
+            },
+            SymptomEntry {
+                code: SymptomCode::Fatigue,
+                severity: Severity::Mild,
+            },
+        ];
+        let second_symptoms = [SymptomEntry {
+            code: SymptomCode::Headache,
+            severity: Severity::Severe,
+        }];
+        source
+            .save_daily_checkin(date(2026, 8, 3), 4, 2, &first_symptoms)
+            .unwrap();
+        source
+            .save_daily_checkin(date(2026, 10, 25), 2, 5, &second_symptoms)
+            .unwrap();
+
+        let original_document = export_backup_document(&source).unwrap();
+        let bridge_script = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/test-backup-crypto-roundtrip.mjs");
+        let mut child = Command::new("node")
+            .arg(&bridge_script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Node.js must be installed for the encrypted backup integration test.");
+        child
+            .stdin
+            .take()
+            .expect("backup bridge stdin is available")
+            .write_all(&serde_json::to_vec(&original_document).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "WebCrypto backup bridge failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let encrypted_round_trip: BackupDocument =
+            serde_json::from_slice(&output.stdout).unwrap();
+
+        let restored = Repository::open(&restored_path, &[0x5A; 32]).unwrap();
+        restore_backup_document(&restored, encrypted_round_trip, Zoned::now().date()).unwrap();
+        let restored_document = export_backup_document(&restored).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(&restored_document).unwrap(),
+            serde_json::to_value(&original_document).unwrap(),
+        );
+
+        drop(source);
+        drop(restored);
+        for path in [&source_path, &restored_path] {
+            let _ = std::fs::remove_file(path);
+            for suffix in ["-wal", "-shm"] {
+                let mut sidecar = path.as_os_str().to_os_string();
+                sidecar.push(suffix);
+                let _ = std::fs::remove_file(std::path::PathBuf::from(sidecar));
+            }
+        }
+    }
+
+    #[test]
     fn widget_ffi_round_trip_uses_the_same_daily_checkin_repository() {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -878,7 +1002,13 @@ mod tests {
             severity: Severity::Moderate,
         }];
         repository
+            .save_daily_checkin(date(2026, 1, 2), 3, 3, &cramps)
+            .unwrap();
+        repository
             .save_daily_checkin(date(2026, 1, 3), 3, 3, &cramps)
+            .unwrap();
+        repository
+            .save_daily_checkin(date(2026, 1, 4), 3, 3, &cramps)
             .unwrap();
         repository
             .save_daily_checkin(date(2026, 1, 31), 3, 3, &[])
@@ -894,7 +1024,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(cramps_pattern.observations_used, 3);
-        assert!((cramps_pattern.probability - (5.0 / 9.0)).abs() < 1e-9);
+        assert!((cramps_pattern.probability - (2.0 / 3.0)).abs() < 1e-9);
 
         drop(repository);
         let _ = std::fs::remove_file(path);
