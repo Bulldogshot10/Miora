@@ -22,6 +22,7 @@ const receiverName = packageName + ".MioraWidgetProvider";
 const actionReceiverName = packageName + ".MioraWidgetActionReceiver";
 const smokeReceiverName = packageName + ".MioraWidgetSmokeTestReceiver";
 const smokeReceiverAction = packageName + ".CI_WIDGET_UPDATE";
+const smokeRoundTripAction = packageName + ".CI_WIDGET_ACTION_ROUND_TRIP";
 
 // Cycle and symptom records are sensitive. Disable Android cloud backup and
 // device-to-device transfer at the manifest and resource-rule levels.
@@ -114,6 +115,7 @@ if (releaseBuild) {
     '        <receiver android:name="' + smokeReceiverName + '" android:exported="true" android:label="Miora CI widget smoke test">',
     '            <intent-filter>',
     '                <action android:name="' + smokeReceiverAction + '" />',
+    '                <action android:name="' + smokeRoundTripAction + '" />',
     '            </intent-filter>',
     '        </receiver>',
   ].join("\n"));
