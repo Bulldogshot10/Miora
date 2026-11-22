@@ -313,6 +313,7 @@ jobs:
         uses: softprops/action-gh-release@28ab305d0ffa26d60ec4bd614126329e26c7a0ec # v3.0.4
         with:
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             web/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
             web/src-tauri/gen/android/app/build/outputs/apk/SHA256SUMS.txt
