@@ -381,8 +381,9 @@ fn symptom_patterns_for_cycle_day(
     // Both inputs are ordered by date. Advance one cursor through period starts
     // instead of rescanning the complete history for every check-in.
     let mut start_index = 0;
-    let mut observations_by_code: Vec<Vec<SymptomObservation>> =
-        (0..codes.len()).map(|_| Vec::with_capacity(checkins.len())).collect();
+    let mut observations_by_code: Vec<Vec<SymptomObservation>> = (0..codes.len())
+        .map(|_| Vec::with_capacity(checkins.len()))
+        .collect();
 
     for (date, symptoms) in &checkins {
         while start_index + 1 < starts.len() && starts[start_index + 1] <= *date {
@@ -908,8 +909,7 @@ mod tests {
             "WebCrypto backup bridge failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let encrypted_round_trip: BackupDocument =
-            serde_json::from_slice(&output.stdout).unwrap();
+        let encrypted_round_trip: BackupDocument = serde_json::from_slice(&output.stdout).unwrap();
 
         let restored = Repository::open(&restored_path, &[0x5A; 32]).unwrap();
         restore_backup_document(&restored, encrypted_round_trip, Zoned::now().date()).unwrap();
