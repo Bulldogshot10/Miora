@@ -126,10 +126,14 @@ cargo test --locked --all-targets
 cargo clippy --locked --all-targets -- -D warnings
 ~~~
 
-The Tauri host can be checked separately:
+The Tauri host can be checked and tested separately. Install the Web development dependencies first because the host integration suite also runs the WebCrypto backup round-trip bridge:
 
 ~~~sh
+cd web
+npm ci
+cd ..
 cargo check --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
+cargo test --locked --manifest-path web/src-tauri/Cargo.toml --all-targets
 ~~~
 
 ## Reproducible builds
