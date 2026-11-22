@@ -366,6 +366,26 @@ jobs:
             exit 1
           fi
 
+          adb -s "$serial" shell am broadcast \
+            -a "$package.CI_WIDGET_ACTION_ROUND_TRIP" \
+            -n "$package/$package.MioraWidgetSmokeTestReceiver" \
+            --eia appWidgetIds 1
+
+          widget_round_trip=""
+          pending_intent_identity=""
+          for attempt in $(seq 1 20); do
+            widget_logs="$(adb -s "$serial" logcat -d -s MioraWidget:D)"
+            widget_round_trip="$(grep -F "widget_action_round_trip_ok" <<< "$widget_logs" || true)"
+            pending_intent_identity="$(grep -F "pending_intent_date_identity_ok" <<< "$widget_logs" || true)"
+            if [ -n "$widget_round_trip" ] && [ -n "$pending_intent_identity" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$widget_round_trip" ] || [ -z "$pending_intent_identity" ]; then
+            adb -s "$serial" logcat -d -t 4000
+            echo "::error::Widget action round-trip, stale-date rejection, or date-scoped PendingIntent identity test failed."
+            exit 1
+          fi
+
           widget_registration="$(adb -s "$serial" shell dumpsys package "$package" | grep -F "MioraWidgetProvider" || true)"
           if [ -z "$widget_registration" ]; then
             adb -s "$serial" logcat -d -t 4000
