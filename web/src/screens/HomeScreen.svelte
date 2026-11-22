@@ -61,7 +61,7 @@
             <span class="prediction-label">NEXT PERIOD WINDOW</span>
             <strong>{formatDate(snapshot.earliestNextPeriodStart)} – {formatDate(snapshot.latestNextPeriodStart)}</strong>
             <span class="prediction-caption">
-              Conditional forecast from {snapshot.cyclesTracked} completed cycle intervals and the current cycle age.
+              Estimated using {snapshot.cyclesTracked} completed cycle intervals and available cycle history.
             </span>
           </div>
         {:else}
