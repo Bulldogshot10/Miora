@@ -351,24 +351,40 @@ function buildSymptomPatterns(
     ["mood_changes", "Mood changes"],
   ] as const;
 
-  return codes.flatMap(([code, label]) => {
-    const observations = checkins.flatMap((checkin) => {
-      const start = periodStarts.filter((date) => date <= checkin.date).at(-1);
-      if (!start) return [];
-      const cycleDay = localDayDifference(start, checkin.date) + 1;
-      if (cycleDay !== targetCycleDay) return [];
+  let startIndex = 0;
+  const cycleObservations = [...checkins]
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .flatMap((checkin) => {
+      while (
+        startIndex + 1 < periodStarts.length &&
+        periodStarts[startIndex + 1] <= checkin.date
+      ) {
+        startIndex += 1;
+      }
+      const start = periodStarts[startIndex];
+      if (!start || start > checkin.date) return [];
       return [{
-        occurred: checkin.symptoms.some((symptom) => symptom.code === code),
+        cycleDay: localDayDifference(start, checkin.date) + 1,
+        symptoms: new Set(checkin.symptoms.map((symptom) => symptom.code)),
       }];
     });
 
-    if (observations.length === 0) return [];
-    const positive = observations.filter((entry) => entry.occurred).length;
+  return codes.flatMap(([code, label]) => {
+    const matching = cycleObservations.filter((entry) => entry.cycleDay === targetCycleDay);
+    if (matching.length === 0) return [];
+
+    const other = cycleObservations.filter((entry) => entry.cycleDay !== targetCycleDay);
+    const matchingSuccesses = matching.filter((entry) => entry.symptoms.has(code)).length;
+    const otherSuccesses = other.filter((entry) => entry.symptoms.has(code)).length;
+    const otherRate = (otherSuccesses + 1) / (other.length + 2);
+    const alpha = 1 + otherRate * 4;
+    const beta = 1 + (1 - otherRate) * 4;
+
     return [{
       code,
       label,
-      probability: (positive + 1) / (observations.length + 2),
-      observationsUsed: observations.length,
+      probability: (matchingSuccesses + alpha) / (matching.length + alpha + beta),
+      observationsUsed: matching.length,
     }];
   });
 }
